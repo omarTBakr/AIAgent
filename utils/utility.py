@@ -5,7 +5,15 @@ from typing import NamedTuple
 import boto3
 from botocore.client import BaseClient
 from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
+from exceptions.storage import (
+    DownloadError,
+    LocalFileNotFoundError,
+    ObjectNotFoundError,
+    StorageConnectionError,
+    UploadError,
+)
 from utils.config import Settings, get_setting
 
 _s3_client = None
@@ -37,13 +45,18 @@ def upload_s3_file(source: Path | str | bytes, bucket: str, key: str) -> str:
     """
     client = get_s3_client()
 
-    if isinstance(source, bytes):
-        client.put_object(Bucket=bucket, Key=key, Body=source)
-    else:
-        source = Path(source)
-        if not source.is_file():
-            raise FileNotFoundError(f"cannot upload, no such file: {source}")
-        client.upload_file(str(source), bucket, key)
+    try:
+        if isinstance(source, bytes):
+            client.put_object(Bucket=bucket, Key=key, Body=source)
+        else:
+            source = Path(source)
+            if not source.is_file():
+                raise LocalFileNotFoundError(f"cannot upload, no such file: {source}")
+            client.upload_file(str(source), bucket, key)
+    except ClientError as exc:
+        raise UploadError(f"could not upload {bucket}/{key}: {exc}") from exc
+    except BotoCoreError as exc:
+        raise StorageConnectionError(f"could not reach the object store: {exc}") from exc
 
     return key
 
@@ -62,7 +75,14 @@ def download_s3_file(bucket: str, key: str, destination: Path | str) -> Path:
 
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    get_s3_client().download_file(bucket, key, str(destination))
+    try:
+        get_s3_client().download_file(bucket, key, str(destination))
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NoSuchBucket"):
+            raise ObjectNotFoundError(f"no such object: {bucket}/{key}") from exc
+        raise DownloadError(f"could not download {bucket}/{key}: {exc}") from exc
+    except BotoCoreError as exc:
+        raise StorageConnectionError(f"could not reach the object store: {exc}") from exc
 
     return destination
 

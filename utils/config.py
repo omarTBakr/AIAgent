@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     temp_md_folder: str = Field(..., description="Sub-folder of TEMP_PD_DIR for markdown")
     api_host: str = Field("0.0.0.0", description="Host the FastAPI server binds to")
     api_port: int = Field(8000, description="Port the FastAPI server listens on")
+    temporal_host: str = Field("localhost:7233", description="host:port of the Temporal frontend service")
+    temporal_namespace: str = Field("default", description="Temporal namespace the worker and client use")
+    temporal_task_queue: str = Field("pdf-processing", description="Task queue the workflow and activities are polled from")
+    log_level: str = Field("INFO", description="Root log level: DEBUG, INFO, WARNING, ERROR")
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent / ".env"), env_file_encoding="utf-8", extra="ignore"

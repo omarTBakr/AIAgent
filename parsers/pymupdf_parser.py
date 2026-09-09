@@ -3,6 +3,8 @@ from pathlib import Path
 import pymupdf
 import pymupdf4llm
 
+from exceptions.parsing import InvalidPdfError, PdfNotFoundError
+
 
 def parse_pdf(source: Path | str | bytes, **kwargs) -> str:
     """
@@ -12,16 +14,21 @@ def parse_pdf(source: Path | str | bytes, **kwargs) -> str:
     arguments are handed straight to pymupdf4llm.to_markdown (page_chunks,
     write_images, table_strategy, ...).
     """
-    if isinstance(source, bytes):
-        doc = pymupdf.open(stream=source, filetype="pdf")
-    else:
-        source = Path(source)
-        if not source.is_file():
-            raise FileNotFoundError(f"cannot parse, no such file: {source}")
-        doc = pymupdf.open(source)
+    try:
+        if isinstance(source, bytes):
+            doc = pymupdf.open(stream=source, filetype="pdf")
+        else:
+            source = Path(source)
+            if not source.is_file():
+                raise PdfNotFoundError(f"cannot parse, no such file: {source}")
+            doc = pymupdf.open(source)
+    except pymupdf.FileDataError as exc:
+        raise InvalidPdfError(f"not a readable PDF: {source!r}") from exc
 
     try:
         return pymupdf4llm.to_markdown(doc, **kwargs)
+    except Exception as exc:
+        raise InvalidPdfError(f"could not convert the PDF to markdown: {exc}") from exc
     finally:
         doc.close()
 

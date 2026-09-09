@@ -1,5 +1,6 @@
 import pymupdf
 import pytest
+from botocore.exceptions import ClientError
 
 import utils.config
 import utils.utility
@@ -52,7 +53,8 @@ class FakeS3Client:
 
     def download_file(self, bucket, key, filename):
         if (bucket, key) not in self.objects:
-            raise KeyError(f"no such object: {bucket}/{key}")
+            # mirrors what boto3 raises, so the error wrapping is exercised
+            raise ClientError({"Error": {"Code": "404", "Message": "Not Found"}}, "GetObject")
         with open(filename, "wb") as handle:
             handle.write(self.objects[(bucket, key)])
 
