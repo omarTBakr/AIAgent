@@ -1,3 +1,15 @@
-from enums.RetryPolicy import RetryPolicies, get_retry_policy
+from enums.RetryPolicy import (
+    ParsingRetryPolicy,
+    RetryProfile,
+    StorageRetryPolicy,
+    StrictRetryPolicy,
+    get_retry_policy,
+)
 
-__all__ = ["RetryPolicies", "get_retry_policy"]
+__all__ = [
+    "ParsingRetryPolicy",
+    "RetryProfile",
+    "StorageRetryPolicy",
+    "StrictRetryPolicy",
+    "get_retry_policy",
+]

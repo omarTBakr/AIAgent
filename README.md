@@ -27,10 +27,11 @@ Each run gets a short random id, so `report.pdf` uploaded twice becomes
 Both the PDF and its Markdown share the same run id, and the workflow id is
 derived from the PDF key so a retried upload deduplicates.
 
-Retry behaviour comes from named profiles in `enums/RetryPolicy.py` rather than
-being spelled out at each call site: `STORAGE` retries three times with a
-one-second initial backoff, `PARSING` twice with a five-second one, and `STRICT`
-does not retry at all. Storage steps time out after a minute, parsing after ten.
+Retry behaviour comes from named policies in `enums/RetryPolicy.py` rather than
+being spelled out at each call site: `StorageRetryPolicy()` retries three times
+with a one-second initial backoff, `ParsingRetryPolicy()` twice with a
+five-second one, and `StrictRetryPolicy()` does not retry at all. Storage steps
+time out after a minute, parsing after ten.
 
 ## Layout
 
@@ -41,7 +42,7 @@ routes/process.py            POST /process  (multipart upload)
 workflows/                   workflow_process_pdf.py - ProcessPdfWorkflow
 activities/                  one Temporal activity per file
 schemas/                     one dataclass schema file per activity/workflow
-enums/RetryPolicy.py         named retry profiles for activities
+enums/RetryPolicy.py         StorageRetryPolicy, ParsingRetryPolicy, ...
 utils/utility.py             get_s3_client, upload_s3_file, download_s3_file,
                              build_run_artifacts
 utils/temporal_client.py     get_temporal_client
@@ -181,7 +182,7 @@ tests/test_workflow_process_pdf.py
                          server, with the activities hitting the S3 fake
 tests/test_temporal_client.py
                          connection caching, timeouts and failure translation
-tests/test_enums.py      the retry profiles and their relative tuning
+tests/test_enums.py      the retry policies and their relative tuning
 tests/test_routes.py     /health and /process, including the 400/422/500 paths
 tests/test_activities.py the five activities via Temporal's ActivityEnvironment
 tests/test_schemas.py    schemas survive Temporal's data converter round trip
@@ -292,10 +293,18 @@ flows that begin from a file already on a worker.
 `worker.py` polls `TEMPORAL_TASK_QUEUE` with `ALL_WORKFLOWS` and
 `ALL_ACTIVITIES`.
 
-Retry profiles live in `enums/RetryPolicy.py`. `RetryPolicies.STORAGE.policy`
-returns a fresh `temporalio.common.RetryPolicy`, and `get_retry_policy("storage")`
-does the same from a string. The enum is called `RetryPolicies` so it does not
-collide with Temporal's own `RetryPolicy` class.
+Retry policies live in `enums/RetryPolicy.py`, one per kind of work:
+
+```python
+from enums import StorageRetryPolicy, ParsingRetryPolicy, StrictRetryPolicy
+
+execute_activity(..., retry_policy=StorageRetryPolicy())
+```
+
+Each returns a fresh `temporalio.common.RetryPolicy`, so a caller that mutates
+one cannot affect anybody else's. `RetryProfile` is the matching enum for
+picking a policy by name (`get_retry_policy("storage")`), which is what keeps
+the tuning selectable from configuration.
 
 One limit worth knowing: `parse_pdf` returns the Markdown through the workflow,
 so a very large document can bump into Temporal's payload size limit. If that

@@ -1,64 +1,67 @@
 from datetime import timedelta
 from enum import Enum
 
-from temporalio.common import RetryPolicy as TemporalRetryPolicy
+from temporalio.common import RetryPolicy
 
 
-class RetryPolicies(Enum):
+def StorageRetryPolicy() -> RetryPolicy:  # noqa: N802 - named as a policy, not a function
     """
-    Named retry profiles for activities, so the tuning lives in one place
-    instead of being spelled out at every call site.
-
-    Each member builds a fresh `temporalio.common.RetryPolicy`:
-
-        execute_activity(..., retry_policy=RetryPolicies.STORAGE.policy)
+    For S3 round trips: blips against the object store are usually transient,
+    so retry a few times and back off quickly.
     """
+    return RetryPolicy(
+        initial_interval=timedelta(seconds=1),
+        backoff_coefficient=2.0,
+        maximum_interval=timedelta(seconds=30),
+        maximum_attempts=3,
+    )
+
+
+def ParsingRetryPolicy() -> RetryPolicy:  # noqa: N802
+    """
+    For PDF parsing: expensive and rarely fails transiently, so try once more
+    at most and wait longer before doing it.
+    """
+    return RetryPolicy(
+        initial_interval=timedelta(seconds=5),
+        backoff_coefficient=2.0,
+        maximum_interval=timedelta(minutes=1),
+        maximum_attempts=2,
+    )
+
+
+def StrictRetryPolicy() -> RetryPolicy:  # noqa: N802
+    """For steps that must not be repeated: run once, surface the failure."""
+    return RetryPolicy(maximum_attempts=1)
+
+
+class RetryProfile(Enum):
+    """Lets a policy be picked by name, e.g. from configuration."""
 
     STORAGE = "storage"
     PARSING = "parsing"
     STRICT = "strict"
 
     @property
-    def policy(self) -> TemporalRetryPolicy:
-        """Returns a RetryPolicy object for this profile."""
-        return _build(self)
+    def policy(self) -> RetryPolicy:
+        return _BUILDERS[self]()
 
 
-def _build(profile: RetryPolicies) -> TemporalRetryPolicy:
-    """
-    A new object every call, so a caller that mutates one cannot affect
-    anybody else's policy.
-    """
-    if profile is RetryPolicies.STORAGE:
-        # network blips against the object store are worth retrying quickly
-        return TemporalRetryPolicy(
-            initial_interval=timedelta(seconds=1),
-            backoff_coefficient=2.0,
-            maximum_interval=timedelta(seconds=30),
-            maximum_attempts=3,
-        )
-
-    if profile is RetryPolicies.PARSING:
-        # parsing is expensive and rarely fails transiently, so back off harder
-        return TemporalRetryPolicy(
-            initial_interval=timedelta(seconds=5),
-            backoff_coefficient=2.0,
-            maximum_interval=timedelta(minutes=1),
-            maximum_attempts=2,
-        )
-
-    # STRICT: run once, surface the failure immediately
-    return TemporalRetryPolicy(maximum_attempts=1)
+_BUILDERS = {
+    RetryProfile.STORAGE: StorageRetryPolicy,
+    RetryProfile.PARSING: ParsingRetryPolicy,
+    RetryProfile.STRICT: StrictRetryPolicy,
+}
 
 
-def get_retry_policy(profile: RetryPolicies | str) -> TemporalRetryPolicy:
+def get_retry_policy(profile: RetryProfile | str) -> RetryPolicy:
     """
     Returns a RetryPolicy object for a profile, given the member or its name.
 
         get_retry_policy("storage")
-        get_retry_policy(RetryPolicies.PARSING)
+        get_retry_policy(RetryProfile.PARSING)
     """
     if isinstance(profile, str):
-        profile = RetryPolicies(profile.lower())
+        profile = RetryProfile(profile.lower())
 
     return profile.policy

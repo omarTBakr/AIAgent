@@ -9,7 +9,7 @@ with workflow.unsafe.imports_passed_through():
     from activities.download_pdf import download_pdf
     from activities.parse_pdf import parse_pdf
     from activities.upload_md import upload_md
-    from enums.RetryPolicy import RetryPolicies
+    from enums.RetryPolicy import ParsingRetryPolicy, StorageRetryPolicy
     from schemas.download_md import DownloadMdInput
     from schemas.download_pdf import DownloadPdfInput
     from schemas.parse_pdf import ParsePdfInput
@@ -43,28 +43,28 @@ class ProcessPdfWorkflow:
             download_pdf,
             DownloadPdfInput(key=payload.pdf_key),
             start_to_close_timeout=STORAGE_TIMEOUT,
-            retry_policy=RetryPolicies.STORAGE.policy,
+            retry_policy=StorageRetryPolicy(),
         )
 
         parsed = await workflow.execute_activity(
             parse_pdf,
             ParsePdfInput(local_path=fetched.local_path),
             start_to_close_timeout=PARSE_TIMEOUT,
-            retry_policy=RetryPolicies.PARSING.policy,
+            retry_policy=ParsingRetryPolicy(),
         )
 
         await workflow.execute_activity(
             upload_md,
             UploadMdInput(markdown=parsed.markdown, key=payload.md_key),
             start_to_close_timeout=STORAGE_TIMEOUT,
-            retry_policy=RetryPolicies.STORAGE.policy,
+            retry_policy=StorageRetryPolicy(),
         )
 
         final = await workflow.execute_activity(
             download_md,
             DownloadMdInput(key=payload.md_key),
             start_to_close_timeout=STORAGE_TIMEOUT,
-            retry_policy=RetryPolicies.STORAGE.policy,
+            retry_policy=StorageRetryPolicy(),
         )
 
         workflow.logger.info("finished %s", payload.md_key)
