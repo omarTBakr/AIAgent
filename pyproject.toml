@@ -17,7 +17,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=26.5.1",
+    "httpx>=0.28.1",
     "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.16.6",
 ]
 
@@ -39,3 +42,9 @@ known-first-party = ["parsers", "routes", "utils"]
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection idiom puts these calls in argument defaults
 extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form", "fastapi.Query", "fastapi.Body"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = "-q"

@@ -34,6 +34,7 @@ utils/utility.py             get_s3_client, upload_s3_file, download_s3_file,
                              build_run_artifacts
 utils/config.py              pydantic-settings Settings, loaded from .env
 parsers/pymupdf_parser.py    parse_pdf, parse_pdf_to_file
+tests/                       pytest suite (offline, no credentials needed)
 assets/                      local scratch space (gitignored)
 setup/                       Temporal server samples (see below)
 ```
@@ -125,6 +126,49 @@ Errors:
 
 The response takes a few seconds — two uploads, a parse and a download happen
 before it returns.
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+The suite runs entirely offline — S3 is replaced with an in-memory fake and the
+scratch directories are redirected into a temp dir, so no credentials, no `.env`
+and no buckets are needed.
+
+```
+tests/conftest.py        fixtures: fake settings, FakeS3Client, a sample PDF
+tests/test_config.py     env loading, whitespace stripping, scratch paths
+tests/test_utility.py    run-id generation, S3 upload/download helpers
+tests/test_parser.py     pymupdf4llm parsing from bytes and from a path
+tests/test_workflow.py   the five-step pipeline end to end
+tests/test_routes.py     /health and /process, including the 400/422/500 paths
+```
+
+## Code quality
+
+Formatting and linting are enforced by [black](https://black.readthedocs.io/)
+and [ruff](https://docs.astral.sh/ruff/), both configured to a line length of
+**130** in `pyproject.toml`.
+
+Install the git hook once, and black, ruff and pytest then run automatically
+before every commit:
+
+```bash
+uv run pre-commit install
+```
+
+To run the checks by hand:
+
+```bash
+uv run black .
+uv run ruff check --fix .
+uv run pytest
+```
+
+The same three checks run in GitHub Actions on every push and pull request
+(`.github/workflows/lint.yml`).
 
 ## Temporal (not wired up yet)
 
