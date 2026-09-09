@@ -1,0 +1,15 @@
+[project]
+name = "aiagent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.43.91",
+    "fastapi>=0.141.1",
+    "pydantic-settings>=2.0",
+    "pymupdf4llm>=1.28.2",
+    "python-multipart>=0.0.32",
+    "temporalio>=1.32.0",
+    "uvicorn[standard]>=0.52.4",
+]

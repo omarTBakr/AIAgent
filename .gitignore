@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment
+.env
+
+# Local scratch space (TEMP_PD_DIR)
+assets/
+
+# Third-party Temporal server samples (cloned separately, see README)
+setup/samples-server/
