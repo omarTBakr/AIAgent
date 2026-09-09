@@ -4,6 +4,9 @@ import pytest
 from temporalio.common import RetryPolicy as TemporalRetryPolicy
 
 from enums import ParsingRetryPolicy, RetryProfile, StorageRetryPolicy, StrictRetryPolicy, get_retry_policy
+from enums.ParsingRetryPolicy import ParsingRetryPolicy as ParsingFromItsOwnModule
+from enums.StorageRetryPolicy import StorageRetryPolicy as StorageFromItsOwnModule
+from enums.StrictRetryPolicy import StrictRetryPolicy as StrictFromItsOwnModule
 
 POLICIES = [StorageRetryPolicy, ParsingRetryPolicy, StrictRetryPolicy]
 
@@ -94,3 +97,17 @@ def test_the_workflow_uses_the_named_profiles():
     assert "ParsingRetryPolicy()" in source
     # the tuning must not be re-inlined into the workflow
     assert "maximum_attempts" not in source
+
+
+def test_each_policy_lives_in_its_own_module():
+    """Each policy is importable directly from the file named after it."""
+    assert StorageFromItsOwnModule is StorageRetryPolicy
+    assert ParsingFromItsOwnModule is ParsingRetryPolicy
+    assert StrictFromItsOwnModule is StrictRetryPolicy
+
+
+def test_module_names_match_the_policy_names():
+    assert StorageRetryPolicy.__module__ == "enums.StorageRetryPolicy"
+    assert ParsingRetryPolicy.__module__ == "enums.ParsingRetryPolicy"
+    assert StrictRetryPolicy.__module__ == "enums.StrictRetryPolicy"
+    assert RetryProfile.__module__ == "enums.RetryProfile"

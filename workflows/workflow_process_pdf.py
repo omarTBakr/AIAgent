@@ -9,7 +9,8 @@ with workflow.unsafe.imports_passed_through():
     from activities.download_pdf import download_pdf
     from activities.parse_pdf import parse_pdf
     from activities.upload_md import upload_md
-    from enums.RetryPolicy import ParsingRetryPolicy, StorageRetryPolicy
+    from enums.ParsingRetryPolicy import ParsingRetryPolicy
+    from enums.StorageRetryPolicy import StorageRetryPolicy
     from schemas.download_md import DownloadMdInput
     from schemas.download_pdf import DownloadPdfInput
     from schemas.parse_pdf import ParsePdfInput
