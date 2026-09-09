@@ -23,6 +23,8 @@
     |
     +-- WorkflowError
           +-- ActivityFailedError
+          +-- TemporalConnectionError
+          +-- WorkflowExecutionError
 
 Catch `AIAgentError` for anything the project raised on purpose; catch a
 subtree (`StorageError`) when the handling is the same across a domain.
@@ -40,7 +42,7 @@ from exceptions.storage import (
     UploadError,
 )
 from exceptions.validation import EmptyFileError, UnsupportedFileTypeError, ValidationError
-from exceptions.workflow import ActivityFailedError, WorkflowError
+from exceptions.workflow import ActivityFailedError, TemporalConnectionError, WorkflowError, WorkflowExecutionError
 
 __all__ = [
     "AIAgentError",
@@ -57,8 +59,10 @@ __all__ = [
     "PdfNotFoundError",
     "StorageConnectionError",
     "StorageError",
+    "TemporalConnectionError",
     "UnsupportedFileTypeError",
     "UploadError",
     "ValidationError",
     "WorkflowError",
+    "WorkflowExecutionError",
 ]

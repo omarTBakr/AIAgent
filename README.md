@@ -9,34 +9,42 @@ resulting Markdown, and pulls that Markdown back onto local disk for inspection.
 
 ## How it works
 
-`POST /process` hands the uploaded bytes to `workflow()`, which runs five steps:
+`POST /process` stores the upload, then hands the work to Temporal:
 
-1. Write the PDF into `TEMP_PDF_FOLDER`
-2. Upload the PDF to the `S3_PDF_BUCKET` bucket
-3. Parse it into Markdown with pymupdf4llm
-4. Upload the Markdown to the `S3_PARSED_MDS` bucket
-5. Download that Markdown back into `TEMP_MD_FOLDER`
+1. The route writes the PDF into `TEMP_PDF_FOLDER` and uploads it to
+   `S3_PDF_BUCKET`, then starts `ProcessPdfWorkflow` with just the two keys
+2. `download_pdf` pulls the PDF onto whichever worker picked up the task
+3. `parse_pdf` converts it to Markdown with pymupdf4llm
+4. `upload_md` writes the Markdown to `S3_PARSED_MDS`
+5. `download_md` pulls it back into `TEMP_MD_FOLDER`
+
+The document itself never travels through the workflow history: the route
+uploads it first and the workflow passes only keys, which is also why the
+worker does not need to share a filesystem with the API.
 
 Each run gets a short random id, so `report.pdf` uploaded twice becomes
 `report-a1b2c3d4.pdf` and `report-9f8e7d6c.pdf` rather than overwriting itself.
-Both the PDF and its Markdown share the same run id.
+Both the PDF and its Markdown share the same run id, and the workflow id is
+derived from the PDF key so a retried upload deduplicates.
 
-All blocking work (boto3 calls, PDF parsing) runs through `asyncio.to_thread`
-so it never stalls the event loop.
+Activities retry three times with exponential backoff. Storage steps time out
+after a minute, parsing after ten.
 
 ## Layout
 
 ```
 main.py                      FastAPI app, /health, uvicorn entrypoint
+worker.py                    Temporal worker entrypoint
 routes/process.py            POST /process  (multipart upload)
-utils/workflow.py            workflow() - the five steps above
+workflows/                   workflow_process_pdf.py - ProcessPdfWorkflow
+activities/                  one Temporal activity per file
+schemas/                     one dataclass schema file per activity/workflow
 utils/utility.py             get_s3_client, upload_s3_file, download_s3_file,
                              build_run_artifacts
+utils/temporal_client.py     get_temporal_client
 utils/config.py              pydantic-settings Settings, loaded from .env
-parsers/pymupdf_parser.py    parse_pdf, parse_pdf_to_file
-activities/                  one Temporal activity per file
-schemas/                     one dataclass schema file per activity
 utils/logger.py              setup_logging, get_logger
+parsers/pymupdf_parser.py    parse_pdf, parse_pdf_to_file
 exceptions/                  the project's exception hierarchy
 tests/                       pytest suite (offline, no credentials needed)
 assets/                      local scratch space (gitignored)
@@ -90,12 +98,25 @@ Both buckets must already exist; the service does not create them.
 
 ## Running
 
+Three processes: a Temporal server, a worker, and the API.
+
 ```bash
+# 1. Temporal server (dev server is the quickest option)
+temporal server start-dev
+
+# 2. Worker, in its own terminal
+uv run worker.py
+
+# 3. API, in a third terminal
 uv run main.py
 ```
 
 The API comes up on `http://127.0.0.1:8000`, with interactive docs at
-`http://127.0.0.1:8000/docs`.
+`http://127.0.0.1:8000/docs`, and the Temporal web UI on
+`http://127.0.0.1:8233`.
+
+`POST /process` returns 503 if Temporal is unreachable, and the request simply
+waits if the server is up but no worker is polling `TEMPORAL_TASK_QUEUE`.
 
 ## API
 
@@ -131,7 +152,8 @@ Errors:
 | `400` | The upload is not a `.pdf`, or the file is empty (`ValidationError`) |
 | `422` | No form field named `file` was sent, or the PDF could not be parsed (`ParsingError`) |
 | `502` | The object store could not be reached or refused the request (`StorageError`) |
-| `500` | Anything else |
+| `503` | Temporal is unreachable (`TemporalConnectionError`) |
+| `500` | The workflow failed, or anything else |
 
 The response takes a few seconds — two uploads, a parse and a download happen
 before it returns.
@@ -151,7 +173,11 @@ tests/conftest.py        fixtures: fake settings, FakeS3Client, a sample PDF
 tests/test_config.py     env loading, whitespace stripping, scratch paths
 tests/test_utility.py    run-id generation, S3 upload/download helpers
 tests/test_parser.py     pymupdf4llm parsing from bytes and from a path
-tests/test_workflow.py   the five-step pipeline end to end
+tests/test_workflow_process_pdf.py
+                         ProcessPdfWorkflow against a real in-process Temporal
+                         server, with the activities hitting the S3 fake
+tests/test_temporal_client.py
+                         connection caching, timeouts and failure translation
 tests/test_routes.py     /health and /process, including the 400/422/500 paths
 tests/test_activities.py the five activities via Temporal's ActivityEnvironment
 tests/test_schemas.py    schemas survive Temporal's data converter round trip
@@ -248,12 +274,23 @@ Each activity logs before the step, after it succeeds, and logs the exception
 before re-raising on failure. Call `utils.logger.setup_logging()` from an
 entrypoint to configure the root logger from `LOG_LEVEL`.
 
-### Not wired up yet
+### The workflow
 
-There is no workflow definition and no worker process yet, so `utils/workflow.py`
-still runs the pipeline as a plain async function and `POST /process` calls it
-directly. The activities above are what a `@workflow.defn` will call once that
-work starts.
+`workflows/workflow_process_pdf.py` defines `ProcessPdfWorkflow`, which chains
+`download_pdf`, `parse_pdf`, `upload_md` and `download_md`. Activity modules are
+imported under `workflow.unsafe.imports_passed_through()` so the workflow
+sandbox does not re-execute them.
+
+`upload_pdf` is registered on the worker but is not part of this workflow: the
+API uploads the document itself, before the workflow starts. It is there for
+flows that begin from a file already on a worker.
+
+`worker.py` polls `TEMPORAL_TASK_QUEUE` with `ALL_WORKFLOWS` and
+`ALL_ACTIVITIES`.
+
+One limit worth knowing: `parse_pdf` returns the Markdown through the workflow,
+so a very large document can bump into Temporal's payload size limit. If that
+happens, have the activity write to the bucket and pass the key instead.
 
 The server samples are a separate upstream repository and are not tracked here.
 To fetch them:
