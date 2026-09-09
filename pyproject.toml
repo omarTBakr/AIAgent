@@ -13,3 +13,29 @@ dependencies = [
     "temporalio>=1.32.0",
     "uvicorn[standard]>=0.52.4",
 ]
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "pre-commit>=4.6.2",
+    "ruff>=0.16.6",
+]
+
+[tool.black]
+line-length = 130
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, pyupgrade, bugbear
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["parsers", "routes", "utils"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom puts these calls in argument defaults
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form", "fastapi.Query", "fastapi.Body"]

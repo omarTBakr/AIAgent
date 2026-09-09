@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,12 +18,10 @@ class Settings(BaseSettings):
     api_port: int = Field(8000, description="Port the FastAPI server listens on")
 
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).parent.parent / ".env"),
-        env_file_encoding='utf-8',
-        extra='ignore'
+        env_file=str(Path(__file__).parent.parent / ".env"), env_file_encoding="utf-8", extra="ignore"
     )
 
-    @field_validator('*', mode='after')
+    @field_validator("*", mode="after")
     @classmethod
     def strip_whitespace(cls, value: str) -> str:
         # values quoted in .env can carry stray spaces (e.g. "parsedmds ")
@@ -59,7 +58,7 @@ _settings_instance = None
 
 def get_setting() -> Settings:
     """
-    Returns a singleton instance of the Settings object, 
+    Returns a singleton instance of the Settings object,
     automatically loaded from the .env file by Pydantic.
     """
     global _settings_instance

@@ -30,14 +30,10 @@ async def workflow(pdf: bytes, filename: str) -> dict:
     markdown = await asyncio.to_thread(parse_pdf, local_pdf)
 
     # 4. upload the parsed markdown
-    await asyncio.to_thread(
-        upload_s3_file, markdown.encode("utf-8"), settings.s3_parsed_mds, md_key
-    )
+    await asyncio.to_thread(upload_s3_file, markdown.encode("utf-8"), settings.s3_parsed_mds, md_key)
 
     # 5. pull it back down into the markdown scratch folder
-    local_md = await asyncio.to_thread(
-        download_s3_file, settings.s3_parsed_mds, md_key, settings.temp_md_path
-    )
+    local_md = await asyncio.to_thread(download_s3_file, settings.s3_parsed_mds, md_key, settings.temp_md_path)
 
     return {
         "pdf_key": pdf_key,

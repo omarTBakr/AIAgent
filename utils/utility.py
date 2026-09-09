@@ -69,6 +69,7 @@ def download_s3_file(bucket: str, key: str, destination: Path | str) -> Path:
 
 class RunArtifacts(NamedTuple):
     """Where one PDF's inputs and outputs live, for a single run."""
+
     pdf_key: str
     md_key: str
     local_pdf: Path
