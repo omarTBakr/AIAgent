@@ -4,9 +4,9 @@ import pytest
 from temporalio.common import RetryPolicy as TemporalRetryPolicy
 
 from enums import ParsingRetryPolicy, RetryProfile, StorageRetryPolicy, StrictRetryPolicy, get_retry_policy
-from enums.ParsingRetryPolicy import ParsingRetryPolicy as ParsingFromItsOwnModule
-from enums.StorageRetryPolicy import StorageRetryPolicy as StorageFromItsOwnModule
-from enums.StrictRetryPolicy import StrictRetryPolicy as StrictFromItsOwnModule
+from enums.RetryPolicy.ParsingRetryPolicy import ParsingRetryPolicy as ParsingFromItsOwnModule
+from enums.RetryPolicy.StorageRetryPolicy import StorageRetryPolicy as StorageFromItsOwnModule
+from enums.RetryPolicy.StrictRetryPolicy import StrictRetryPolicy as StrictFromItsOwnModule
 
 POLICIES = [StorageRetryPolicy, ParsingRetryPolicy, StrictRetryPolicy]
 
@@ -107,7 +107,25 @@ def test_each_policy_lives_in_its_own_module():
 
 
 def test_module_names_match_the_policy_names():
-    assert StorageRetryPolicy.__module__ == "enums.StorageRetryPolicy"
-    assert ParsingRetryPolicy.__module__ == "enums.ParsingRetryPolicy"
-    assert StrictRetryPolicy.__module__ == "enums.StrictRetryPolicy"
-    assert RetryProfile.__module__ == "enums.RetryProfile"
+    assert StorageRetryPolicy.__module__ == "enums.RetryPolicy.StorageRetryPolicy"
+    assert ParsingRetryPolicy.__module__ == "enums.RetryPolicy.ParsingRetryPolicy"
+    assert StrictRetryPolicy.__module__ == "enums.RetryPolicy.StrictRetryPolicy"
+    assert RetryProfile.__module__ == "enums.RetryPolicy.RetryProfile"
+
+
+def test_policies_are_grouped_under_the_retry_policy_package():
+    """All four live under enums.RetryPolicy, not directly in enums."""
+    import enums.RetryPolicy as package
+
+    for name in ("StorageRetryPolicy", "ParsingRetryPolicy", "StrictRetryPolicy", "RetryProfile"):
+        assert hasattr(package, name), name
+        assert getattr(package, name).__module__.startswith("enums.RetryPolicy.")
+
+
+def test_the_package_re_export_is_the_same_object():
+    """`from enums import X` and the deep import must not diverge."""
+    import enums
+    import enums.RetryPolicy as package
+
+    assert enums.StorageRetryPolicy is package.StorageRetryPolicy
+    assert enums.get_retry_policy is package.get_retry_policy

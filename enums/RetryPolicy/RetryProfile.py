@@ -2,9 +2,9 @@ from enum import Enum
 
 from temporalio.common import RetryPolicy
 
-from enums.ParsingRetryPolicy import ParsingRetryPolicy
-from enums.StorageRetryPolicy import StorageRetryPolicy
-from enums.StrictRetryPolicy import StrictRetryPolicy
+from enums.RetryPolicy.ParsingRetryPolicy import ParsingRetryPolicy
+from enums.RetryPolicy.StorageRetryPolicy import StorageRetryPolicy
+from enums.RetryPolicy.StrictRetryPolicy import StrictRetryPolicy
 
 
 class RetryProfile(Enum):

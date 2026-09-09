@@ -42,7 +42,7 @@ routes/process.py            POST /process  (multipart upload)
 workflows/                   workflow_process_pdf.py - ProcessPdfWorkflow
 activities/                  one Temporal activity per file
 schemas/                     one dataclass schema file per activity/workflow
-enums/                       one retry policy per file
+enums/RetryPolicy/           one retry policy per file
 utils/utility.py             get_s3_client, upload_s3_file, download_s3_file,
                              build_run_artifacts
 utils/temporal_client.py     get_temporal_client
@@ -293,18 +293,25 @@ flows that begin from a file already on a worker.
 `worker.py` polls `TEMPORAL_TASK_QUEUE` with `ALL_WORKFLOWS` and
 `ALL_ACTIVITIES`.
 
-Retry policies live in `enums/`, one per file:
+Retry policies live under `enums/RetryPolicy/`, one per file:
 
 ```
-enums/StorageRetryPolicy.py   3 attempts, 1s initial backoff, 30s cap
-enums/ParsingRetryPolicy.py   2 attempts, 5s initial backoff, 1m cap
-enums/StrictRetryPolicy.py    1 attempt, no retry
-enums/RetryProfile.py         the enum + get_retry_policy(), for name lookup
+enums/RetryPolicy/StorageRetryPolicy.py   3 attempts, 1s backoff, 30s cap
+enums/RetryPolicy/ParsingRetryPolicy.py   2 attempts, 5s backoff, 1m cap
+enums/RetryPolicy/StrictRetryPolicy.py    1 attempt, no retry
+enums/RetryPolicy/RetryProfile.py         the enum + get_retry_policy()
+```
+
+They are re-exported from both packages, so either import works:
+
+```python
+from enums import StorageRetryPolicy
+from enums.RetryPolicy.StorageRetryPolicy import StorageRetryPolicy
 ```
 
 
 ```python
-from enums import StorageRetryPolicy, ParsingRetryPolicy, StrictRetryPolicy
+from enums.RetryPolicy import StorageRetryPolicy, ParsingRetryPolicy, StrictRetryPolicy
 
 execute_activity(..., retry_policy=StorageRetryPolicy())
 ```

@@ -1,17 +1,19 @@
-"""Retry policies, one per kind of work, one per file.
+"""Enumerated, named configuration for the project.
+
+Retry policies live under `enums.RetryPolicy` and are re-exported here, so
+either import works:
 
     from enums import StorageRetryPolicy
-
-    execute_activity(..., retry_policy=StorageRetryPolicy())
-
-`RetryProfile` resolves the same policies by name, for tuning that comes from
-configuration rather than from the call site.
+    from enums.RetryPolicy.StorageRetryPolicy import StorageRetryPolicy
 """
 
-from enums.ParsingRetryPolicy import ParsingRetryPolicy
-from enums.RetryProfile import RetryProfile, get_retry_policy
-from enums.StorageRetryPolicy import StorageRetryPolicy
-from enums.StrictRetryPolicy import StrictRetryPolicy
+from enums.RetryPolicy import (
+    ParsingRetryPolicy,
+    RetryProfile,
+    StorageRetryPolicy,
+    StrictRetryPolicy,
+    get_retry_policy,
+)
 
 __all__ = [
     "ParsingRetryPolicy",
