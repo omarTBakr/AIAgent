@@ -1,33 +1,17 @@
+"""Entrypoint for the PDF processing worker: `uv run worker.py`.
+
+Kept at the project root so the working directory lands on sys.path; the worker
+itself lives in workers/process_pdf_worker.py.
+"""
+
 import asyncio
 
-from temporalio.worker import Worker
-
-from activities import ALL_ACTIVITIES
-from utils.config import get_setting
-from utils.logger import get_logger, setup_logging
-from utils.temporal_client import get_temporal_client
-from workflows import ALL_WORKFLOWS
-
-logger = get_logger(__name__)
+from workers.process_pdf_worker import run_process_pdf_worker
 
 
-async def main() -> None:
-    setup_logging()
-    settings = get_setting()
-
-    client = await get_temporal_client()
-
-    logger.info("worker polling task queue %r", settings.temporal_task_queue)
-
-    worker = Worker(
-        client,
-        task_queue=settings.temporal_task_queue,
-        workflows=ALL_WORKFLOWS,
-        activities=ALL_ACTIVITIES,
-    )
-
-    await worker.run()
+def main() -> None:
+    asyncio.run(run_process_pdf_worker())
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

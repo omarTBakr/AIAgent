@@ -15,6 +15,7 @@ from temporalio.worker import Worker
 
 from activities import ALL_ACTIVITIES
 from schemas.process_pdf import ProcessPdfInput
+from workers.process_pdf_worker import create_process_pdf_worker
 from workflows import ALL_WORKFLOWS
 from workflows.workflow_process_pdf import ProcessPdfWorkflow
 
@@ -105,3 +106,10 @@ async def test_a_missing_pdf_fails_the_workflow(worker, s3):
 
 async def test_the_workflow_is_registered():
     assert ProcessPdfWorkflow in ALL_WORKFLOWS
+
+
+async def test_the_pdf_worker_builds_against_a_real_client(temporal_env):
+    """create_process_pdf_worker must produce a Worker Temporal actually accepts."""
+    worker = await create_process_pdf_worker(task_queue="smoke-queue", client=temporal_env.client)
+
+    assert worker.task_queue == "smoke-queue"

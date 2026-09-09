@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     api_port: int = Field(8000, description="Port the FastAPI server listens on")
     temporal_host: str = Field("localhost:7233", description="host:port of the Temporal frontend service")
     temporal_namespace: str = Field("default", description="Temporal namespace the worker and client use")
-    temporal_task_queue: str = Field("pdf-processing", description="Task queue the workflow and activities are polled from")
+    temporal_task_queue: str = Field("process_pdf_queue", description="Task queue the workflow and activities are polled from")
     log_level: str = Field("INFO", description="Root log level: DEBUG, INFO, WARNING, ERROR")
 
     model_config = SettingsConfigDict(

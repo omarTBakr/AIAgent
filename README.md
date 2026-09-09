@@ -37,7 +37,9 @@ time out after a minute, parsing after ten.
 
 ```
 main.py                      FastAPI app, /health, uvicorn entrypoint
-worker.py                    Temporal worker entrypoint
+worker.py                    worker entrypoint (uv run worker.py)
+workers/process_pdf_worker.py  the PDF pipeline worker
+utils/create_worker.py       create_worker() factory
 routes/process.py            POST /process  (multipart upload)
 workflows/                   workflow_process_pdf.py - ProcessPdfWorkflow
 activities/                  one Temporal activity per file
@@ -95,7 +97,7 @@ cp .env.example .env
 | `API_PORT` | Port uvicorn listens on (default `8000`) |
 | `TEMPORAL_HOST` | `host:port` of the Temporal frontend (default `localhost:7233`) |
 | `TEMPORAL_NAMESPACE` | Temporal namespace (default `default`) |
-| `TEMPORAL_TASK_QUEUE` | Task queue for the workflow and activities (default `pdf-processing`) |
+| `TEMPORAL_TASK_QUEUE` | Task queue for the workflow and activities (default `process_pdf_queue`) |
 | `LOG_LEVEL` | Root log level (default `INFO`) |
 
 Both buckets must already exist; the service does not create them.
@@ -183,6 +185,8 @@ tests/test_workflow_process_pdf.py
 tests/test_temporal_client.py
                          connection caching, timeouts and failure translation
 tests/test_enums.py      the retry policies and their relative tuning
+tests/test_create_worker.py
+                         worker wiring: task queue, client, registrations
 tests/test_routes.py     /health and /process, including the 400/422/500 paths
 tests/test_activities.py the five activities via Temporal's ActivityEnvironment
 tests/test_schemas.py    schemas survive Temporal's data converter round trip
@@ -290,8 +294,26 @@ sandbox does not re-execute them.
 API uploads the document itself, before the workflow starts. It is there for
 flows that begin from a file already on a worker.
 
-`worker.py` polls `TEMPORAL_TASK_QUEUE` with `ALL_WORKFLOWS` and
-`ALL_ACTIVITIES`.
+`workers/process_pdf_worker.py` is the worker for this pipeline. It registers
+`ALL_WORKFLOWS` and `ALL_ACTIVITIES` and polls `TEMPORAL_TASK_QUEUE`, which
+defaults to `process_pdf_queue`.
+
+It is built by `utils/create_worker.py`, a small factory that connects a client
+and applies the configured task queue when none is passed:
+
+```python
+worker = await create_worker(workflows=ALL_WORKFLOWS, activities=ALL_ACTIVITIES)
+await worker.run()
+```
+
+`create_worker` returns the worker rather than running it, so a caller can pick
+between `await worker.run()` and `async with worker:` (which is what the tests
+use). Both the task queue and the client can be overridden, which is how the
+tests point a worker at a throwaway queue.
+
+`worker.py` at the project root is only an entrypoint; it exists so that
+`uv run worker.py` puts the project directory on `sys.path`. Running the module
+directly also works: `uv run python -m workers.process_pdf_worker`.
 
 Retry policies live under `enums/RetryPolicy/`, one per file:
 
