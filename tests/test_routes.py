@@ -31,6 +31,7 @@ def temporal(monkeypatch):
     """Installs a stub Temporal client and hands it back so tests can assert on it."""
     stub = StubClient(
         result=ProcessPdfResult(
+            task_id="abc123",
             pdf_bucket="test-pdfs",
             pdf_key="report-abc123.pdf",
             md_bucket="test-mds",
@@ -96,12 +97,30 @@ def test_process_uses_the_configured_task_queue(client, pdf_bytes, settings, tem
     assert temporal.calls[0]["task_queue"] == settings.temporal_task_queue
 
 
-def test_process_gives_the_workflow_a_deterministic_id(client, pdf_bytes, temporal):
-    """The id is derived from the key, so a retry of the same upload dedupes."""
+def test_the_workflow_id_is_the_task_id(client, pdf_bytes, temporal):
     client.post("/process", files={"file": ("report.pdf", pdf_bytes, "application/pdf")})
 
     call = temporal.calls[0]
-    assert call["id"] == f"process-pdf-{call['arg'].pdf_key}"
+    assert call["id"] == f"process-pdf-{call['arg'].task_id}"
+
+
+def test_each_upload_gets_its_own_task_id(client, pdf_bytes, temporal):
+    """Two uploads of the same file must not collide."""
+    client.post("/process", files={"file": ("report.pdf", pdf_bytes, "application/pdf")})
+    client.post("/process", files={"file": ("report.pdf", pdf_bytes, "application/pdf")})
+
+    first, second = (call["arg"].task_id for call in temporal.calls)
+    assert first != second
+    assert temporal.calls[0]["id"] != temporal.calls[1]["id"]
+
+
+def test_the_task_id_ties_the_keys_together(client, pdf_bytes, temporal):
+    """The same id names the workflow and appears in both object keys."""
+    client.post("/process", files={"file": ("report.pdf", pdf_bytes, "application/pdf")})
+
+    payload = temporal.calls[0]["arg"]
+    assert payload.task_id in payload.pdf_key
+    assert payload.task_id in payload.md_key
 
 
 def test_process_rejects_a_non_pdf(client):
@@ -189,3 +208,4 @@ def test_the_response_carries_the_full_result(client, pdf_bytes):
     assert body["md_bucket"] == "test-mds"
     assert body["markdown_characters"] == 80
     assert body["workflow_id"] == "process-pdf-report-abc123.pdf"
+    assert body["task_id"] == "abc123"

@@ -90,6 +90,7 @@ def download_s3_file(bucket: str, key: str, destination: Path | str) -> Path:
 class RunArtifacts(NamedTuple):
     """Where one PDF's inputs and outputs live, for a single run."""
 
+    task_id: str
     pdf_key: str
     md_key: str
     local_pdf: Path
@@ -100,7 +101,8 @@ def build_run_artifacts(filename: str, settings: Settings) -> RunArtifacts:
     Derives the object keys and the local PDF path for one run.
 
     The pdf and the markdown share a random run id so that two uploads of the
-    same filename cannot overwrite each other in the buckets.
+    same filename cannot overwrite each other in the buckets. That same id is
+    the task id: it names the workflow run and is logged by every activity.
     """
     stem = Path(filename).stem or "document"
     run_id = uuid.uuid4().hex[:8]
@@ -108,6 +110,7 @@ def build_run_artifacts(filename: str, settings: Settings) -> RunArtifacts:
     md_key = f"{stem}-{run_id}.md"
 
     return RunArtifacts(
+        task_id=run_id,
         pdf_key=pdf_key,
         md_key=md_key,
         local_pdf=settings.temp_pdf_path / pdf_key,

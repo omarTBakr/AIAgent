@@ -38,7 +38,7 @@ async def process(file: UploadFile = File(...)) -> dict:
         if not pdf:
             raise EmptyFileError("uploaded file is empty")
 
-        pdf_key, md_key, local_pdf = build_run_artifacts(file.filename, settings)
+        task_id, pdf_key, md_key, local_pdf = build_run_artifacts(file.filename, settings)
 
         await asyncio.to_thread(local_pdf.write_bytes, pdf)
         await asyncio.to_thread(upload_s3_file, local_pdf, settings.s3_pdf_bucket, pdf_key)
@@ -47,8 +47,8 @@ async def process(file: UploadFile = File(...)) -> dict:
 
         result = await client.execute_workflow(
             ProcessPdfWorkflow.run,
-            ProcessPdfInput(pdf_key=pdf_key, md_key=md_key),
-            id=f"process-pdf-{pdf_key}",
+            ProcessPdfInput(task_id=task_id, pdf_key=pdf_key, md_key=md_key),
+            id=f"process-pdf-{task_id}",
             task_queue=settings.temporal_task_queue,
         )
 
@@ -78,6 +78,7 @@ async def process(file: UploadFile = File(...)) -> dict:
 
     return {
         "status": "ok",
+        "task_id": result.task_id,
         "workflow_id": result.workflow_id,
         "pdf_bucket": result.pdf_bucket,
         "pdf_key": result.pdf_key,

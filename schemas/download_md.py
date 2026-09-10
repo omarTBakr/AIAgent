@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class DownloadMdInput:
     """Markdown to pull out of the parsed bucket into the local Markdown folder."""
 
+    task_id: str
     key: str
 
 

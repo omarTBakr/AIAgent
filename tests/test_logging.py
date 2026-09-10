@@ -31,7 +31,7 @@ def sample_pdf_on_disk(pdf_bytes, tmp_path):
 
 async def test_upload_pdf_logs(env, s3, caplog, sample_pdf_on_disk):
     with caplog.at_level(logging.INFO):
-        await env.run(upload_pdf, UploadPdfInput(local_path=str(sample_pdf_on_disk), key="report.pdf"))
+        await env.run(upload_pdf, UploadPdfInput(task_id="abc123", local_path=str(sample_pdf_on_disk), key="report.pdf"))
 
     assert any("uploading pdf" in r.message for r in caplog.records)
     assert any("uploaded pdf" in r.message for r in caplog.records)
@@ -41,21 +41,21 @@ async def test_download_pdf_logs(env, s3, settings, pdf_bytes, caplog):
     s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
 
     with caplog.at_level(logging.INFO):
-        await env.run(download_pdf, DownloadPdfInput(key="report.pdf"))
+        await env.run(download_pdf, DownloadPdfInput(task_id="abc123", key="report.pdf"))
 
     assert any("downloaded pdf to" in r.message for r in caplog.records)
 
 
 async def test_parse_pdf_logs(env, caplog, sample_pdf_on_disk):
     with caplog.at_level(logging.INFO):
-        await env.run(parse_pdf, ParsePdfInput(local_path=str(sample_pdf_on_disk)))
+        await env.run(parse_pdf, ParsePdfInput(task_id="abc123", local_path=str(sample_pdf_on_disk)))
 
     assert any("parsing pdf" in r.message for r in caplog.records)
 
 
 async def test_upload_md_logs(env, s3, caplog):
     with caplog.at_level(logging.INFO):
-        await env.run(upload_md, UploadMdInput(markdown="# heading", key="report.md"))
+        await env.run(upload_md, UploadMdInput(task_id="abc123", markdown="# heading", key="report.md"))
 
     assert any("uploaded markdown" in r.message for r in caplog.records)
 
@@ -64,7 +64,7 @@ async def test_download_md_logs(env, s3, settings, caplog):
     s3.objects[(settings.s3_parsed_mds, "report.md")] = b"# heading"
 
     with caplog.at_level(logging.INFO):
-        await env.run(download_md, DownloadMdInput(key="report.md"))
+        await env.run(download_md, DownloadMdInput(task_id="abc123", key="report.md"))
 
     assert any("downloaded markdown to" in r.message for r in caplog.records)
 
@@ -72,7 +72,7 @@ async def test_download_md_logs(env, s3, settings, caplog):
 async def test_activities_log_through_the_temporal_logger(env, s3, caplog, sample_pdf_on_disk):
     """temporalio.activity is the logger name that carries activity context."""
     with caplog.at_level(logging.INFO):
-        await env.run(upload_pdf, UploadPdfInput(local_path=str(sample_pdf_on_disk), key="report.pdf"))
+        await env.run(upload_pdf, UploadPdfInput(task_id="abc123", local_path=str(sample_pdf_on_disk), key="report.pdf"))
 
     assert any(r.name.startswith("temporalio.activity") for r in caplog.records)
 
@@ -80,7 +80,7 @@ async def test_activities_log_through_the_temporal_logger(env, s3, caplog, sampl
 async def test_a_failing_activity_logs_the_exception(env, s3, caplog):
     """The download has nothing to fetch, so it must log and re-raise."""
     with caplog.at_level(logging.ERROR), pytest.raises(ObjectNotFoundError):
-        await env.run(download_md, DownloadMdInput(key="missing.md"))
+        await env.run(download_md, DownloadMdInput(task_id="abc123", key="missing.md"))
 
     assert any(r.levelno == logging.ERROR for r in caplog.records)
     assert any("failed to download markdown" in r.message for r in caplog.records)
@@ -115,3 +115,22 @@ def test_setup_logging_is_idempotent(settings, monkeypatch):
 
 def test_get_logger_returns_a_named_logger():
     assert get_logger("aiagent.test").name == "aiagent.test"
+
+
+async def test_every_activity_log_line_carries_the_task_id(env, s3, caplog, sample_pdf_on_disk):
+    """Interleaved tasks must be tellable apart in the log."""
+    with caplog.at_level(logging.INFO):
+        await env.run(upload_pdf, UploadPdfInput(task_id="abc123", local_path=str(sample_pdf_on_disk), key="report.pdf"))
+
+    activity_records = [r for r in caplog.records if r.name.startswith("temporalio.activity")]
+    assert activity_records
+    assert all("[task abc123]" in r.getMessage() for r in activity_records)
+
+
+@pytest.mark.parametrize("fn", ALL_ACTIVITIES)
+async def test_every_activity_logs_the_task_id(fn):
+    """Guards against a new activity logging without the task id."""
+    import inspect
+
+    source = inspect.getsource(fn)
+    assert "payload.task_id" in source

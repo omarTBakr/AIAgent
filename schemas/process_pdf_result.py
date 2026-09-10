@@ -11,6 +11,7 @@ class ProcessPdfResult:
     anything, without shipping the Markdown itself through workflow history.
     """
 
+    task_id: str
     pdf_bucket: str
     pdf_key: str
     md_bucket: str

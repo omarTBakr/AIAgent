@@ -154,7 +154,8 @@ curl -F "file=@report.pdf" http://127.0.0.1:8000/process
 ```json
 {
   "status": "ok",
-  "workflow_id": "process-pdf-report-a1b2c3d4.pdf",
+  "task_id": "a1b2c3d4",
+  "workflow_id": "process-pdf-a1b2c3d4",
   "pdf_bucket": "temporalpdfs",
   "pdf_key": "report-a1b2c3d4.pdf",
   "md_bucket": "parsedmds",
@@ -168,6 +169,25 @@ curl -F "file=@report.pdf" http://127.0.0.1:8000/process
 The workflow returns a `ProcessPdfResult` (`schemas/process_pdf_result.py`),
 which the route passes straight through. `workflow_id` is what you look up in
 the Temporal UI.
+
+### Task ids
+
+Every upload gets a `task_id`, generated once in `build_run_artifacts`. It is
+the thread that ties one run together: it names the workflow
+(`process-pdf-<task_id>`), appears in both object keys, is carried in every
+activity's input, and prefixes every log line the run produces.
+
+That is what makes concurrent runs readable. Two uploads at the same time
+interleave in the log, but each stays separable:
+
+```
+[task f54f498f] parsing pdf ...
+[task e296b2ea] parsing pdf ...
+[task f54f498f] uploaded markdown parsedmds/...
+[task e296b2ea] uploaded markdown parsedmds/...
+```
+
+Grepping one task id gives you that run and nothing else.
 
 Errors:
 

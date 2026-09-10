@@ -48,11 +48,11 @@ async def worker(temporal_env):
         yield temporal_env.client, task_queue
 
 
-async def run_workflow(worker, pdf_key, md_key):
+async def run_workflow(worker, pdf_key, md_key, task_id="t1"):
     client, task_queue = worker
     return await client.execute_workflow(
         ProcessPdfWorkflow.run,
-        ProcessPdfInput(pdf_key=pdf_key, md_key=md_key),
+        ProcessPdfInput(task_id=task_id, pdf_key=pdf_key, md_key=md_key),
         id=f"test-{uuid.uuid4()}",
         task_queue=task_queue,
     )
@@ -134,3 +134,11 @@ async def test_the_reported_character_count_matches_the_markdown(worker, s3, set
 
     stored = s3.objects[(settings.s3_parsed_mds, result.md_key)].decode("utf-8")
     assert result.markdown_characters == len(stored)
+
+
+async def test_the_task_id_survives_the_round_trip(worker, s3, settings, pdf_bytes):
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+
+    result = await run_workflow(worker, "report.pdf", "report.md", task_id="deadbeef")
+
+    assert result.task_id == "deadbeef"

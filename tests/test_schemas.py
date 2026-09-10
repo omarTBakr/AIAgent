@@ -15,19 +15,20 @@ from schemas.upload_md import UploadMdInput, UploadMdOutput
 from schemas.upload_pdf import UploadPdfInput, UploadPdfOutput
 
 SCHEMAS = [
-    (UploadPdfInput, {"local_path": "/tmp/a.pdf", "key": "a.pdf"}),
+    (UploadPdfInput, {"task_id": "t1", "local_path": "/tmp/a.pdf", "key": "a.pdf"}),
     (UploadPdfOutput, {"bucket": "pdfs", "key": "a.pdf"}),
-    (DownloadPdfInput, {"key": "a.pdf"}),
+    (DownloadPdfInput, {"task_id": "t1", "key": "a.pdf"}),
     (DownloadPdfOutput, {"bucket": "pdfs", "local_path": "/tmp/a.pdf"}),
-    (ParsePdfInput, {"local_path": "/tmp/a.pdf"}),
+    (ParsePdfInput, {"task_id": "t1", "local_path": "/tmp/a.pdf"}),
     (ParsePdfOutput, {"markdown": "# heading"}),
-    (UploadMdInput, {"markdown": "# heading", "key": "a.md"}),
+    (UploadMdInput, {"task_id": "t1", "markdown": "# heading", "key": "a.md"}),
     (UploadMdOutput, {"bucket": "mds", "key": "a.md"}),
-    (DownloadMdInput, {"key": "a.md"}),
-    (ProcessPdfInput, {"pdf_key": "a.pdf", "md_key": "a.md"}),
+    (DownloadMdInput, {"task_id": "t1", "key": "a.md"}),
+    (ProcessPdfInput, {"task_id": "t1", "pdf_key": "a.pdf", "md_key": "a.md"}),
     (
         ProcessPdfResult,
         {
+            "task_id": "t1",
             "pdf_bucket": "pdfs",
             "pdf_key": "a.pdf",
             "md_bucket": "mds",
