@@ -10,4 +10,5 @@ class DownloadMdInput:
 
 @dataclass
 class DownloadMdOutput:
+    bucket: str
     local_path: str

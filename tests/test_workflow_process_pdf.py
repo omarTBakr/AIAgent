@@ -113,3 +113,24 @@ async def test_the_pdf_worker_builds_against_a_real_client(temporal_env):
     worker = await create_process_pdf_worker(task_queue="smoke-queue", client=temporal_env.client)
 
     assert worker.task_queue == "smoke-queue"
+
+
+async def test_the_workflow_reports_a_full_result(worker, s3, settings, pdf_bytes):
+    """The result carries both buckets, both local paths and the parse size."""
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+
+    result = await run_workflow(worker, "report.pdf", "report.md")
+
+    assert result.pdf_bucket == settings.s3_pdf_bucket
+    assert result.md_bucket == settings.s3_parsed_mds
+    assert result.markdown_characters > 0
+    assert result.workflow_id.startswith("test-")
+
+
+async def test_the_reported_character_count_matches_the_markdown(worker, s3, settings, pdf_bytes):
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+
+    result = await run_workflow(worker, "report.pdf", "report.md")
+
+    stored = s3.objects[(settings.s3_parsed_mds, result.md_key)].decode("utf-8")
+    assert result.markdown_characters == len(stored)

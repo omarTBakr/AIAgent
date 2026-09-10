@@ -10,4 +10,5 @@ class DownloadPdfInput:
 
 @dataclass
 class DownloadPdfOutput:
+    bucket: str
     local_path: str

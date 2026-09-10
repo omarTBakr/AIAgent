@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import routes.process
 import utils.temporal_client
 from main import app
-from schemas.process_pdf import ProcessPdfOutput
+from schemas.process_pdf_result import ProcessPdfResult
 
 
 class StubClient:
@@ -30,11 +30,15 @@ class StubClient:
 def temporal(monkeypatch):
     """Installs a stub Temporal client and hands it back so tests can assert on it."""
     stub = StubClient(
-        result=ProcessPdfOutput(
+        result=ProcessPdfResult(
+            pdf_bucket="test-pdfs",
             pdf_key="report-abc123.pdf",
+            md_bucket="test-mds",
             md_key="report-abc123.md",
             local_pdf="/tmp/TEMP_PDF/report-abc123.pdf",
             local_md="/tmp/TEMP_MD/report-abc123.md",
+            markdown_characters=80,
+            workflow_id="process-pdf-report-abc123.pdf",
         )
     )
 
@@ -174,3 +178,14 @@ def test_an_unexpected_error_is_still_500(client, temporal, pdf_bytes):
     response = client.post("/process", files={"file": ("report.pdf", pdf_bytes, "application/pdf")})
 
     assert response.status_code == 500
+
+
+def test_the_response_carries_the_full_result(client, pdf_bytes):
+    """Everything the workflow reported reaches the caller."""
+    response = client.post("/process", files={"file": ("report.pdf", pdf_bytes, "application/pdf")})
+
+    body = response.json()
+    assert body["pdf_bucket"] == "test-pdfs"
+    assert body["md_bucket"] == "test-mds"
+    assert body["markdown_characters"] == 80
+    assert body["workflow_id"] == "process-pdf-report-abc123.pdf"

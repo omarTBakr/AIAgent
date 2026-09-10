@@ -33,6 +33,7 @@ async def test_download_pdf(env, s3, settings, pdf_bytes):
 
     result = await env.run(download_pdf, DownloadPdfInput(key="report.pdf"))
 
+    assert result.bucket == settings.s3_pdf_bucket
     assert result.local_path == str(settings.temp_pdf_path / "report.pdf")
     assert (settings.temp_pdf_path / "report.pdf").read_bytes() == pdf_bytes
 
@@ -58,6 +59,7 @@ async def test_download_md(env, s3, settings):
 
     result = await env.run(download_md, DownloadMdInput(key="report.md"))
 
+    assert result.bucket == settings.s3_parsed_mds
     assert result.local_path == str(settings.temp_md_path / "report.md")
     assert (settings.temp_md_path / "report.md").read_text() == "# heading"
 

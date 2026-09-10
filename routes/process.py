@@ -78,8 +78,12 @@ async def process(file: UploadFile = File(...)) -> dict:
 
     return {
         "status": "ok",
+        "workflow_id": result.workflow_id,
+        "pdf_bucket": result.pdf_bucket,
         "pdf_key": result.pdf_key,
+        "md_bucket": result.md_bucket,
         "md_key": result.md_key,
         "local_pdf": result.local_pdf,
         "local_md": result.local_md,
+        "markdown_characters": result.markdown_characters,
     }

@@ -7,11 +7,3 @@ class ProcessPdfInput:
 
     pdf_key: str
     md_key: str
-
-
-@dataclass
-class ProcessPdfOutput:
-    pdf_key: str
-    md_key: str
-    local_pdf: str
-    local_md: str

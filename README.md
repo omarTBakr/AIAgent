@@ -154,12 +154,20 @@ curl -F "file=@report.pdf" http://127.0.0.1:8000/process
 ```json
 {
   "status": "ok",
+  "workflow_id": "process-pdf-report-a1b2c3d4.pdf",
+  "pdf_bucket": "temporalpdfs",
   "pdf_key": "report-a1b2c3d4.pdf",
+  "md_bucket": "parsedmds",
   "md_key": "report-a1b2c3d4.md",
   "local_pdf": "/path/to/AIAgent/assets/TEMP_PDF/report-a1b2c3d4.pdf",
-  "local_md": "/path/to/AIAgent/assets/TEMP_MD/report-a1b2c3d4.md"
+  "local_md": "/path/to/AIAgent/assets/TEMP_MD/report-a1b2c3d4.md",
+  "markdown_characters": 1843
 }
 ```
+
+The workflow returns a `ProcessPdfResult` (`schemas/process_pdf_result.py`),
+which the route passes straight through. `workflow_id` is what you look up in
+the Temporal UI.
 
 Errors:
 

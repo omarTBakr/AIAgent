@@ -20,4 +20,4 @@ async def download_md(payload: DownloadMdInput) -> DownloadMdOutput:
 
     activity.logger.info("downloaded markdown to %s", local_path)
 
-    return DownloadMdOutput(local_path=str(local_path))
+    return DownloadMdOutput(bucket=settings.s3_parsed_mds, local_path=str(local_path))

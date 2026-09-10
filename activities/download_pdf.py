@@ -20,4 +20,4 @@ async def download_pdf(payload: DownloadPdfInput) -> DownloadPdfOutput:
 
     activity.logger.info("downloaded pdf to %s", local_path)
 
-    return DownloadPdfOutput(local_path=str(local_path))
+    return DownloadPdfOutput(bucket=settings.s3_pdf_bucket, local_path=str(local_path))

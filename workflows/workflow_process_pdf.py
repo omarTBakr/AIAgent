@@ -14,7 +14,8 @@ with workflow.unsafe.imports_passed_through():
     from schemas.download_md import DownloadMdInput
     from schemas.download_pdf import DownloadPdfInput
     from schemas.parse_pdf import ParsePdfInput
-    from schemas.process_pdf import ProcessPdfInput, ProcessPdfOutput
+    from schemas.process_pdf import ProcessPdfInput
+    from schemas.process_pdf_result import ProcessPdfResult
     from schemas.upload_md import UploadMdInput
 
 # S3 round trips are quick; a parse of a large PDF is not.
@@ -37,7 +38,7 @@ class ProcessPdfWorkflow:
     """
 
     @workflow.run
-    async def run(self, payload: ProcessPdfInput) -> ProcessPdfOutput:
+    async def run(self, payload: ProcessPdfInput) -> ProcessPdfResult:
         workflow.logger.info("processing %s -> %s", payload.pdf_key, payload.md_key)
 
         fetched = await workflow.execute_activity(
@@ -54,7 +55,7 @@ class ProcessPdfWorkflow:
             retry_policy=ParsingRetryPolicy(),
         )
 
-        await workflow.execute_activity(
+        stored_md = await workflow.execute_activity(
             upload_md,
             UploadMdInput(markdown=parsed.markdown, key=payload.md_key),
             start_to_close_timeout=STORAGE_TIMEOUT,
@@ -70,9 +71,13 @@ class ProcessPdfWorkflow:
 
         workflow.logger.info("finished %s", payload.md_key)
 
-        return ProcessPdfOutput(
+        return ProcessPdfResult(
+            pdf_bucket=fetched.bucket,
             pdf_key=payload.pdf_key,
-            md_key=payload.md_key,
+            md_bucket=stored_md.bucket,
+            md_key=stored_md.key,
             local_pdf=fetched.local_path,
             local_md=final.local_path,
+            markdown_characters=len(parsed.markdown),
+            workflow_id=workflow.info().workflow_id,
         )
