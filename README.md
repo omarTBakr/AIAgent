@@ -1,7 +1,9 @@
-# AIAgent
+# Legal Review Agent
 
-A small FastAPI service that turns PDFs into Markdown and keeps both in
-S3-compatible object storage.
+A FastAPI service with two Temporal pipelines over S3-compatible object storage:
+one turns PDFs into Markdown and keeps both, the other has an LLM review
+several PDFs for legal risk and pauses for a human when the model has a
+question (`POST /legal`).
 
 Upload a PDF to one endpoint and the service stores the original, parses it with
 [pymupdf4llm](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/), stores the
@@ -72,8 +74,8 @@ setup/                       Temporal server samples (see below)
 ## Setup
 
 ```bash
-git clone https://github.com/omarTBakr/AIAgent.git
-cd AIAgent
+git clone https://github.com/omarTBakr/legal-review-agent.git
+cd legal-review-agent
 uv sync
 ```
 
@@ -193,8 +195,8 @@ Once finished:
   "pdf_key": "report-a1b2c3d4.pdf",
   "md_bucket": "parsedmds",
   "md_key": "report-a1b2c3d4.md",
-  "local_pdf": "/path/to/AIAgent/assets/TEMP_PDF/report-a1b2c3d4.pdf",
-  "local_md": "/path/to/AIAgent/assets/TEMP_MD/report-a1b2c3d4.md",
+  "local_pdf": "/path/to/legal-review-agent/assets/TEMP_PDF/report-a1b2c3d4.pdf",
+  "local_md": "/path/to/legal-review-agent/assets/TEMP_MD/report-a1b2c3d4.md",
   "markdown_characters": 1843
 }
 ```
@@ -411,7 +413,7 @@ The build context is the **project root**, not the Docker directory, because
 the worker imports `activities/`, `workflows/`, `utils/` and friends:
 
 ```bash
-docker build -f workers/process_pdf_worker/Docker/Dockerfile -t aiagent-process-pdf-worker .
+docker build -f workers/process_pdf_worker/Docker/Dockerfile -t legal-review-agent-process-pdf-worker .
 ```
 
 The image is only the worker: it polls `TEMPORAL_TASK_QUEUE`, serves no HTTP
@@ -422,12 +424,12 @@ a container `localhost` means the container:
 # Temporal running in Docker (compose network)
 docker run --rm --network temporal-network \
   --env-file .env -e TEMPORAL_HOST=temporal:7233 \
-  aiagent-process-pdf-worker
+  legal-review-agent-process-pdf-worker
 
 # Temporal on the host
 docker run --rm --add-host=host.docker.internal:host-gateway \
   --env-file .env -e TEMPORAL_HOST=host.docker.internal:7233 \
-  aiagent-process-pdf-worker
+  legal-review-agent-process-pdf-worker
 ```
 
 Set `RUN_WORKER_IN_API=false` when a container is doing the work, or you will
@@ -455,10 +457,10 @@ rebuilding or replacing the container leaves the files intact.
 With `docker run` instead of compose:
 
 ```bash
-docker run -d --name aiagent-worker --network temporal-network \
+docker run -d --name legal-review-agent-worker --network temporal-network \
   -v aiagent_assets:/app/assets \
   --env-file .env -e TEMPORAL_HOST=temporal:7233 -e RUN_WORKER_IN_API=false \
-  aiagent-process-pdf-worker
+  legal-review-agent-process-pdf-worker
 ```
 
 To read the files from the host instead, bind-mount the project's own `assets/`

@@ -9,8 +9,8 @@ Run it as a module:
 
 or as a container (see Docker/Dockerfile):
 
-    docker build -f workers/legal_advice_worker/Docker/Dockerfile -t aiagent-legal-advice-worker .
-    docker run --rm --env-file .env aiagent-legal-advice-worker
+    docker build -f workers/legal_advice_worker/Docker/Dockerfile -t legal-review-agent-legal-advice-worker .
+    docker run --rm --env-file .env legal-review-agent-legal-advice-worker
 """
 
 import asyncio

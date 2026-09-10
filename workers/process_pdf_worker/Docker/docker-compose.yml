@@ -6,7 +6,7 @@
 #
 # `down` keeps the volume; only `down -v` deletes it.
 
-name: aiagent
+name: legal-review-agent
 
 services:
   process-pdf-worker:
@@ -14,7 +14,7 @@ services:
       # the project root: the worker imports activities/, workflows/, utils/
       context: ../../..
       dockerfile: workers/process_pdf_worker/Docker/Dockerfile
-    image: aiagent-process-pdf-worker
+    image: legal-review-agent-process-pdf-worker
     env_file:
       - ../../../.env
     environment:

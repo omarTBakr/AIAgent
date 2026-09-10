@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(title="AIAgent", description="PDF -> markdown pipeline", lifespan=lifespan)
+app = FastAPI(title="Legal Review Agent", description="PDF to Markdown and LLM legal review pipelines", lifespan=lifespan)
 app.include_router(process_router)
 app.include_router(legal_router)
 

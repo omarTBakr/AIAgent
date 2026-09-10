@@ -6,7 +6,7 @@
 #
 # `down` keeps the volume; only `down -v` deletes it.
 
-name: aiagent-legal
+name: legal-review-agent-legal
 
 services:
   legal-advice-worker:
@@ -14,7 +14,7 @@ services:
       # the project root: the worker imports activities/, workflows/, utils/
       context: ../../..
       dockerfile: workers/legal_advice_worker/Docker/Dockerfile
-    image: aiagent-legal-advice-worker
+    image: legal-review-agent-legal-advice-worker
     env_file:
       - ../../../.env
     environment:

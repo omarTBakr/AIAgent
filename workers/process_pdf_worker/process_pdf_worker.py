@@ -10,8 +10,8 @@ as a module:
 
 or as a container, standalone (see Docker/Dockerfile):
 
-    docker build -f workers/process_pdf_worker/Docker/Dockerfile -t aiagent-process-pdf-worker .
-    docker run --rm --env-file .env aiagent-process-pdf-worker
+    docker build -f workers/process_pdf_worker/Docker/Dockerfile -t legal-review-agent-process-pdf-worker .
+    docker run --rm --env-file .env legal-review-agent-process-pdf-worker
 """
 
 import asyncio

@@ -3,8 +3,8 @@
 # The build context is the project root, not this directory, because the worker
 # imports activities/, workflows/, utils/ and friends:
 #
-#   docker build -f workers/process_pdf_worker/Docker/Dockerfile -t aiagent-process-pdf-worker .
-#   docker run --rm --env-file .env aiagent-process-pdf-worker
+#   docker build -f workers/process_pdf_worker/Docker/Dockerfile -t legal-review-agent-process-pdf-worker .
+#   docker run --rm --env-file .env legal-review-agent-process-pdf-worker
 #
 # This image is only the worker. It polls TEMPORAL_TASK_QUEUE and executes
 # workflows; it serves no HTTP and does not need a port.

@@ -1,7 +1,7 @@
 [project]
-name = "aiagent"
+name = "legal-review-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "PDF to Markdown and LLM legal review pipelines on Temporal"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
