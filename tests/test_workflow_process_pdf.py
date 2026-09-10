@@ -142,3 +142,26 @@ async def test_the_task_id_survives_the_round_trip(worker, s3, settings, pdf_byt
     result = await run_workflow(worker, "report.pdf", "report.md", task_id="deadbeef")
 
     assert result.task_id == "deadbeef"
+
+
+async def test_a_typed_handle_decodes_the_result(worker, s3, settings, pdf_bytes):
+    """The status endpoint refetches by id; an untyped handle hands back a dict
+    rather than a ProcessPdfResult, which no stub-based test can catch."""
+    from schemas.process_pdf_result import ProcessPdfResult
+
+    client, task_queue = worker
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+    workflow_id = f"typed-{uuid.uuid4()}"
+
+    await client.execute_workflow(
+        ProcessPdfWorkflow.run,
+        ProcessPdfInput(task_id="typed1", pdf_key="report.pdf", md_key="report.md"),
+        id=workflow_id,
+        task_queue=task_queue,
+    )
+
+    handle = client.get_workflow_handle_for(ProcessPdfWorkflow.run, workflow_id)
+    result = await handle.result()
+
+    assert isinstance(result, ProcessPdfResult)
+    assert result.task_id == "typed1"

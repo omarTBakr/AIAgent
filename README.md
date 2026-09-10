@@ -131,8 +131,9 @@ The API comes up on `http://127.0.0.1:8000`, with interactive docs at
 `http://127.0.0.1:8000/docs`, and the Temporal web UI on
 `http://127.0.0.1:8233`.
 
-`POST /process` returns 503 if Temporal is unreachable, and the request simply
-waits if the server is up but no worker is polling `TEMPORAL_TASK_QUEUE`.
+`POST /process` returns 503 if Temporal is unreachable. If the server is up but
+no worker is polling `TEMPORAL_TASK_QUEUE`, the upload is still accepted with a
+202 and the task simply stays `processing` until a worker appears.
 
 ## API
 
@@ -145,7 +146,8 @@ waits if the server is up but no worker is polling `TEMPORAL_TASK_QUEUE`.
 ### `POST /process`
 
 Accepts `multipart/form-data` with a single field named `file` containing a
-`.pdf`.
+`.pdf`. Stores the PDF, starts the workflow and returns **202 straight away** —
+it does not wait for the pipeline to finish.
 
 ```bash
 curl -F "file=@report.pdf" http://127.0.0.1:8000/process
@@ -153,7 +155,33 @@ curl -F "file=@report.pdf" http://127.0.0.1:8000/process
 
 ```json
 {
-  "status": "ok",
+  "status": "processing",
+  "task_id": "a1b2c3d4",
+  "workflow_id": "process-pdf-a1b2c3d4",
+  "pdf_bucket": "temporalpdfs",
+  "pdf_key": "report-a1b2c3d4.pdf",
+  "md_key": "report-a1b2c3d4.md"
+}
+```
+
+Add `?wait=true` to hold the request open until the pipeline finishes and get
+the full result in one call (HTTP 200). Convenient for small documents; a large
+PDF will outlast most proxy timeouts.
+
+### `GET /process/{task_id}`
+
+Reports where a task got to. Temporal holds the state, so nothing is stored
+here.
+
+```json
+{ "status": "processing", "task_id": "a1b2c3d4", "workflow_id": "process-pdf-a1b2c3d4" }
+```
+
+Once finished:
+
+```json
+{
+  "status": "completed",
   "task_id": "a1b2c3d4",
   "workflow_id": "process-pdf-a1b2c3d4",
   "pdf_bucket": "temporalpdfs",
@@ -166,9 +194,26 @@ curl -F "file=@report.pdf" http://127.0.0.1:8000/process
 }
 ```
 
+A task that ended badly reports the terminal state's name: `failed`,
+`terminated`, `timed_out` or `canceled`. An unknown id is a 404.
+
+Because the work is durable, a dropped connection costs you the response but
+never the run: the `task_id` fetches it afterwards.
+
+### Errors
+
+| Status | Cause |
+| --- | --- |
+| `400` | The upload is not a `.pdf`, or the file is empty (`ValidationError`) |
+| `404` | No task with that id |
+| `422` | No form field named `file` was sent, or the PDF could not be parsed (`ParsingError`) |
+| `502` | The object store could not be reached or refused the request (`StorageError`) |
+| `503` | Temporal is unreachable (`TemporalConnectionError`) |
+| `500` | The workflow failed, or anything else |
+
 The workflow returns a `ProcessPdfResult` (`schemas/process_pdf_result.py`),
-which the route passes straight through. `workflow_id` is what you look up in
-the Temporal UI.
+which both endpoints pass straight through. `workflow_id` is what you look up
+in the Temporal UI.
 
 ### Task ids
 
@@ -188,19 +233,6 @@ interleave in the log, but each stays separable:
 ```
 
 Grepping one task id gives you that run and nothing else.
-
-Errors:
-
-| Status | Cause |
-| --- | --- |
-| `400` | The upload is not a `.pdf`, or the file is empty (`ValidationError`) |
-| `422` | No form field named `file` was sent, or the PDF could not be parsed (`ParsingError`) |
-| `502` | The object store could not be reached or refused the request (`StorageError`) |
-| `503` | Temporal is unreachable (`TemporalConnectionError`) |
-| `500` | The workflow failed, or anything else |
-
-The response takes a few seconds — two uploads, a parse and a download happen
-before it returns.
 
 ## Tests
 
