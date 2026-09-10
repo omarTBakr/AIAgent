@@ -29,8 +29,21 @@ class Settings(BaseSettings):
     @field_validator("*", mode="after")
     @classmethod
     def strip_whitespace(cls, value: str) -> str:
-        # values quoted in .env can carry stray spaces (e.g. "parsedmds ")
-        return value.strip() if isinstance(value, str) else value
+        """
+        Cleans up values that arrive with stray spaces or quotes.
+
+        python-dotenv strips surrounding quotes, docker's --env-file does not,
+        so the same .env line can reach us either way.
+        """
+        if not isinstance(value, str):
+            return value
+
+        value = value.strip()
+
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1].strip()
+
+        return value
 
     @property
     def temp_root(self) -> Path:

@@ -4,9 +4,14 @@ Run it with the root entrypoint:
 
     uv run worker.py
 
-or as a module:
+as a module:
 
-    uv run python -m workers.process_pdf_worker
+    uv run python -m workers.process_pdf_worker.process_pdf_worker
+
+or as a container, standalone (see Docker/Dockerfile):
+
+    docker build -f workers/process_pdf_worker/Docker/Dockerfile -t aiagent-process-pdf-worker .
+    docker run --rm --env-file .env aiagent-process-pdf-worker
 """
 
 import asyncio

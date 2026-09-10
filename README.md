@@ -38,7 +38,7 @@ time out after a minute, parsing after ten.
 ```
 main.py                      FastAPI app, /health, uvicorn entrypoint
 worker.py                    worker entrypoint (uv run worker.py)
-workers/process_pdf_worker.py  the PDF pipeline worker
+workers/<name>/              one directory per worker, each with Docker/
 utils/create_worker.py       create_worker() factory
 routes/process.py            POST /process  (multipart upload)
 workflows/                   workflow_process_pdf.py - ProcessPdfWorkflow
@@ -390,6 +390,54 @@ tests point a worker at a throwaway queue.
 `worker.py` at the project root is only an entrypoint; it exists so that
 `uv run worker.py` puts the project directory on `sys.path`. Running the module
 directly also works: `uv run python -m workers.process_pdf_worker`.
+
+### One directory per worker
+
+Each worker is self-contained, so a new one is a new directory rather than an
+edit to a shared file:
+
+```
+workers/process_pdf_worker/
+    __init__.py                re-exports create_/run_process_pdf_worker
+    __main__.py                so `python -m workers.process_pdf_worker` runs it
+    process_pdf_worker.py      the worker itself
+    Docker/Dockerfile          runs it as a standalone container
+```
+
+### Running a worker in Docker
+
+The build context is the **project root**, not the Docker directory, because
+the worker imports `activities/`, `workflows/`, `utils/` and friends:
+
+```bash
+docker build -f workers/process_pdf_worker/Docker/Dockerfile -t aiagent-process-pdf-worker .
+```
+
+The image is only the worker: it polls `TEMPORAL_TASK_QUEUE`, serves no HTTP
+and exposes no port. Point it at wherever Temporal actually is, because inside
+a container `localhost` means the container:
+
+```bash
+# Temporal running in Docker (compose network)
+docker run --rm --network temporal-network \
+  --env-file .env -e TEMPORAL_HOST=temporal:7233 \
+  aiagent-process-pdf-worker
+
+# Temporal on the host
+docker run --rm --add-host=host.docker.internal:host-gateway \
+  --env-file .env -e TEMPORAL_HOST=host.docker.internal:7233 \
+  aiagent-process-pdf-worker
+```
+
+Set `RUN_WORKER_IN_API=false` when a container is doing the work, or you will
+be running two workers.
+
+`.env` is written as `KEY=value` with no spaces or quotes, because docker's
+`--env-file` rejects `KEY = value` and passes quotes through literally.
+Settings strips both anyway, but the file has to parse first.
+
+The scratch directory is `/app/assets` inside the container; mount a volume
+there if you want the intermediate files to outlive it.
 
 Retry policies live under `enums/RetryPolicy/`, one per file:
 
