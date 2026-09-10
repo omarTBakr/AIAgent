@@ -1,0 +1,40 @@
+# Runs the PDF worker with a persistent volume for its scratch space.
+#
+#   docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml up -d --build
+#   docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml logs -f
+#   docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml down
+#
+# `down` keeps the volume; only `down -v` deletes it.
+
+name: legal-review-agent
+
+services:
+  process-pdf-worker:
+    build:
+      # the project root: the worker imports activities/, workflows/, utils/
+      context: ../../..
+      dockerfile: workers/process_pdf_worker/Docker/Dockerfile
+    image: legal-review-agent-process-pdf-worker
+    env_file:
+      - ../../../.env
+    environment:
+      # localhost inside a container is the container itself
+      TEMPORAL_HOST: temporal:7233
+      # the container is the worker, so the API must not start a second one
+      RUN_WORKER_IN_API: "false"
+    volumes:
+      # survives `docker rm` and `compose down`; the PDFs and markdown written
+      # by the activities outlive any single container
+      - assets:/app/assets
+    networks:
+      - temporal-network
+    restart: unless-stopped
+
+volumes:
+  assets:
+    name: aiagent_assets
+
+networks:
+  temporal-network:
+    # the network your Temporal stack already runs on
+    external: true

@@ -89,3 +89,18 @@ def test_download_creates_missing_parent_directories(s3, tmp_path):
     download_s3_file("test-mds", "note.md", destination)
 
     assert destination.is_file()
+
+
+def test_the_task_id_is_shared_by_both_keys(settings):
+    artifacts = build_run_artifacts("report.pdf", settings)
+
+    assert artifacts.task_id
+    assert artifacts.task_id in artifacts.pdf_key
+    assert artifacts.task_id in artifacts.md_key
+
+
+def test_the_task_id_is_unique_per_call(settings):
+    first = build_run_artifacts("report.pdf", settings)
+    second = build_run_artifacts("report.pdf", settings)
+
+    assert first.task_id != second.task_id

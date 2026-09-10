@@ -48,11 +48,11 @@ async def worker(temporal_env):
         yield temporal_env.client, task_queue
 
 
-async def run_workflow(worker, pdf_key, md_key):
+async def run_workflow(worker, pdf_key, md_key, task_id="t1"):
     client, task_queue = worker
     return await client.execute_workflow(
         ProcessPdfWorkflow.run,
-        ProcessPdfInput(pdf_key=pdf_key, md_key=md_key),
+        ProcessPdfInput(task_id=task_id, pdf_key=pdf_key, md_key=md_key),
         id=f"test-{uuid.uuid4()}",
         task_queue=task_queue,
     )
@@ -113,3 +113,55 @@ async def test_the_pdf_worker_builds_against_a_real_client(temporal_env):
     worker = await create_process_pdf_worker(task_queue="smoke-queue", client=temporal_env.client)
 
     assert worker.task_queue == "smoke-queue"
+
+
+async def test_the_workflow_reports_a_full_result(worker, s3, settings, pdf_bytes):
+    """The result carries both buckets, both local paths and the parse size."""
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+
+    result = await run_workflow(worker, "report.pdf", "report.md")
+
+    assert result.pdf_bucket == settings.s3_pdf_bucket
+    assert result.md_bucket == settings.s3_parsed_mds
+    assert result.markdown_characters > 0
+    assert result.workflow_id.startswith("test-")
+
+
+async def test_the_reported_character_count_matches_the_markdown(worker, s3, settings, pdf_bytes):
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+
+    result = await run_workflow(worker, "report.pdf", "report.md")
+
+    stored = s3.objects[(settings.s3_parsed_mds, result.md_key)].decode("utf-8")
+    assert result.markdown_characters == len(stored)
+
+
+async def test_the_task_id_survives_the_round_trip(worker, s3, settings, pdf_bytes):
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+
+    result = await run_workflow(worker, "report.pdf", "report.md", task_id="deadbeef")
+
+    assert result.task_id == "deadbeef"
+
+
+async def test_a_typed_handle_decodes_the_result(worker, s3, settings, pdf_bytes):
+    """The status endpoint refetches by id; an untyped handle hands back a dict
+    rather than a ProcessPdfResult, which no stub-based test can catch."""
+    from schemas.process_pdf_result import ProcessPdfResult
+
+    client, task_queue = worker
+    s3.objects[(settings.s3_pdf_bucket, "report.pdf")] = pdf_bytes
+    workflow_id = f"typed-{uuid.uuid4()}"
+
+    await client.execute_workflow(
+        ProcessPdfWorkflow.run,
+        ProcessPdfInput(task_id="typed1", pdf_key="report.pdf", md_key="report.md"),
+        id=workflow_id,
+        task_queue=task_queue,
+    )
+
+    handle = client.get_workflow_handle_for(ProcessPdfWorkflow.run, workflow_id)
+    result = await handle.result()
+
+    assert isinstance(result, ProcessPdfResult)
+    assert result.task_id == "typed1"

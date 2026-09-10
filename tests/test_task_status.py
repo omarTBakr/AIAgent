@@ -1,0 +1,58 @@
+import pytest
+from temporalio.client import WorkflowExecutionStatus
+
+from enums.TaskStatus import TaskStatus
+
+
+@pytest.mark.parametrize(
+    "temporal_status,expected",
+    [
+        (WorkflowExecutionStatus.RUNNING, TaskStatus.PROCESSING),
+        (WorkflowExecutionStatus.COMPLETED, TaskStatus.COMPLETED),
+        (WorkflowExecutionStatus.FAILED, TaskStatus.FAILED),
+        (WorkflowExecutionStatus.CANCELED, TaskStatus.CANCELED),
+        (WorkflowExecutionStatus.TERMINATED, TaskStatus.TERMINATED),
+        (WorkflowExecutionStatus.TIMED_OUT, TaskStatus.TIMED_OUT),
+        (WorkflowExecutionStatus.CONTINUED_AS_NEW, TaskStatus.CONTINUED_AS_NEW),
+    ],
+)
+def test_every_temporal_status_maps(temporal_status, expected):
+    assert TaskStatus.from_temporal(temporal_status) is expected
+
+
+def test_running_is_reported_as_processing():
+    """'running' is Temporal's word; the API says 'processing'."""
+    assert TaskStatus.from_temporal(WorkflowExecutionStatus.RUNNING).value == "processing"
+
+
+@pytest.mark.parametrize("status", list(WorkflowExecutionStatus))
+def test_no_temporal_status_is_unmapped(status):
+    """A new state in Temporal's enum must not blow up the status endpoint."""
+    assert isinstance(TaskStatus.from_temporal(status), TaskStatus)
+
+
+@pytest.mark.parametrize("status", list(TaskStatus))
+def test_values_are_lowercase_strings(status):
+    assert status.value == status.value.lower()
+
+
+IN_PROGRESS = (TaskStatus.PROCESSING, TaskStatus.AWAITING_HUMAN)
+
+
+def test_in_progress_states_are_unfinished():
+    """A task waiting on a human is still running, not done."""
+    for status in IN_PROGRESS:
+        assert status.is_finished is False
+
+
+def test_every_other_state_is_finished():
+    for status in TaskStatus:
+        if status not in IN_PROGRESS:
+            assert status.is_finished is True
+
+
+def test_awaiting_human_never_comes_from_temporal():
+    """It is reported by the workflow query, not by Temporal's own enum."""
+    from temporalio.client import WorkflowExecutionStatus
+
+    assert all(TaskStatus.from_temporal(s) is not TaskStatus.AWAITING_HUMAN for s in WorkflowExecutionStatus)

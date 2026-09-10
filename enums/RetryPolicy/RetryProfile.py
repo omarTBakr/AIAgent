@@ -2,6 +2,7 @@ from enum import Enum
 
 from temporalio.common import RetryPolicy
 
+from enums.RetryPolicy.LLMRetryPolicy import LLMRetryPolicy
 from enums.RetryPolicy.ParsingRetryPolicy import ParsingRetryPolicy
 from enums.RetryPolicy.StorageRetryPolicy import StorageRetryPolicy
 from enums.RetryPolicy.StrictRetryPolicy import StrictRetryPolicy
@@ -12,6 +13,7 @@ class RetryProfile(Enum):
 
     STORAGE = "storage"
     PARSING = "parsing"
+    LLM = "llm"
     STRICT = "strict"
 
     @property
@@ -22,6 +24,7 @@ class RetryProfile(Enum):
 _BUILDERS = {
     RetryProfile.STORAGE: StorageRetryPolicy,
     RetryProfile.PARSING: ParsingRetryPolicy,
+    RetryProfile.LLM: LLMRetryPolicy,
     RetryProfile.STRICT: StrictRetryPolicy,
 }
 

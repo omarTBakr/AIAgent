@@ -9,6 +9,7 @@
     +-- ValidationError
     |     +-- UnsupportedFileTypeError
     |     +-- EmptyFileError
+    |     +-- TooManyFilesError
     |
     +-- StorageError
     |     +-- StorageConnectionError
@@ -21,6 +22,12 @@
     |     +-- PdfNotFoundError            (also a FileNotFoundError)
     |     +-- InvalidPdfError
     |
+    +-- LLMError
+    |     +-- LLMConfigurationError
+    |     +-- LLMTimeoutError
+    |     +-- LLMRateLimitError
+    |     +-- LLMResponseError
+    |
     +-- WorkflowError
           +-- ActivityFailedError
           +-- TemporalConnectionError
@@ -32,6 +39,13 @@ subtree (`StorageError`) when the handling is the same across a domain.
 
 from exceptions.base import AIAgentError
 from exceptions.config import ConfigurationError, InvalidSettingError, MissingSettingError
+from exceptions.llm import (
+    LLMConfigurationError,
+    LLMError,
+    LLMRateLimitError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
 from exceptions.parsing import InvalidPdfError, ParsingError, PdfNotFoundError
 from exceptions.storage import (
     DownloadError,
@@ -41,7 +55,7 @@ from exceptions.storage import (
     StorageError,
     UploadError,
 )
-from exceptions.validation import EmptyFileError, UnsupportedFileTypeError, ValidationError
+from exceptions.validation import EmptyFileError, TooManyFilesError, UnsupportedFileTypeError, ValidationError
 from exceptions.workflow import ActivityFailedError, TemporalConnectionError, WorkflowError, WorkflowExecutionError
 
 __all__ = [
@@ -52,6 +66,11 @@ __all__ = [
     "EmptyFileError",
     "InvalidPdfError",
     "InvalidSettingError",
+    "LLMConfigurationError",
+    "LLMError",
+    "LLMRateLimitError",
+    "LLMResponseError",
+    "LLMTimeoutError",
     "LocalFileNotFoundError",
     "MissingSettingError",
     "ObjectNotFoundError",
@@ -59,6 +78,7 @@ __all__ = [
     "PdfNotFoundError",
     "StorageConnectionError",
     "StorageError",
+    "TooManyFilesError",
     "TemporalConnectionError",
     "UnsupportedFileTypeError",
     "UploadError",

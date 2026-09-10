@@ -1,7 +1,9 @@
-# AIAgent
+# Legal Review Agent
 
-A small FastAPI service that turns PDFs into Markdown and keeps both in
-S3-compatible object storage.
+A FastAPI service with two Temporal pipelines over S3-compatible object storage:
+one turns PDFs into Markdown and keeps both, the other has an LLM review
+several PDFs for legal risk and pauses for a human when the model has a
+question (`POST /legal`).
 
 Upload a PDF to one endpoint and the service stores the original, parses it with
 [pymupdf4llm](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/), stores the
@@ -38,7 +40,7 @@ time out after a minute, parsing after ten.
 ```
 main.py                      FastAPI app, /health, uvicorn entrypoint
 worker.py                    worker entrypoint (uv run worker.py)
-workers/process_pdf_worker.py  the PDF pipeline worker
+workers/<name>/              one directory per worker, each with Docker/
 utils/create_worker.py       create_worker() factory
 routes/process.py            POST /process  (multipart upload)
 workflows/                   workflow_process_pdf.py - ProcessPdfWorkflow
@@ -50,6 +52,11 @@ utils/utility.py             get_s3_client, upload_s3_file, download_s3_file,
 utils/temporal_client.py     get_temporal_client
 utils/config.py              pydantic-settings Settings, loaded from .env
 utils/logger.py              setup_logging, get_logger
+utils/store_upload.py        validate_upload, store_upload
+utils/responses.py           the JSON bodies both endpoints return
+utils/http_errors.py         exception -> HTTP status mapping
+utils/workflow_ids.py        task id <-> workflow id
+enums/TaskStatus.py          the states a task is reported in
 parsers/pymupdf_parser.py    parse_pdf, parse_pdf_to_file
 exceptions/                  the project's exception hierarchy
 tests/                       pytest suite (offline, no credentials needed)
@@ -67,8 +74,8 @@ setup/                       Temporal server samples (see below)
 ## Setup
 
 ```bash
-git clone https://github.com/omarTBakr/AIAgent.git
-cd AIAgent
+git clone https://github.com/omarTBakr/legal-review-agent.git
+cd legal-review-agent
 uv sync
 ```
 
@@ -131,8 +138,9 @@ The API comes up on `http://127.0.0.1:8000`, with interactive docs at
 `http://127.0.0.1:8000/docs`, and the Temporal web UI on
 `http://127.0.0.1:8233`.
 
-`POST /process` returns 503 if Temporal is unreachable, and the request simply
-waits if the server is up but no worker is polling `TEMPORAL_TASK_QUEUE`.
+`POST /process` returns 503 if Temporal is unreachable. If the server is up but
+no worker is polling `TEMPORAL_TASK_QUEUE`, the upload is still accepted with a
+202 and the task simply stays `processing` until a worker appears.
 
 ## API
 
@@ -145,7 +153,8 @@ waits if the server is up but no worker is polling `TEMPORAL_TASK_QUEUE`.
 ### `POST /process`
 
 Accepts `multipart/form-data` with a single field named `file` containing a
-`.pdf`.
+`.pdf`. Stores the PDF, starts the workflow and returns **202 straight away** —
+it does not wait for the pipeline to finish.
 
 ```bash
 curl -F "file=@report.pdf" http://127.0.0.1:8000/process
@@ -153,26 +162,84 @@ curl -F "file=@report.pdf" http://127.0.0.1:8000/process
 
 ```json
 {
-  "status": "ok",
+  "status": "processing",
+  "task_id": "a1b2c3d4",
+  "workflow_id": "process-pdf-a1b2c3d4",
+  "pdf_bucket": "temporalpdfs",
   "pdf_key": "report-a1b2c3d4.pdf",
-  "md_key": "report-a1b2c3d4.md",
-  "local_pdf": "/path/to/AIAgent/assets/TEMP_PDF/report-a1b2c3d4.pdf",
-  "local_md": "/path/to/AIAgent/assets/TEMP_MD/report-a1b2c3d4.md"
+  "md_key": "report-a1b2c3d4.md"
 }
 ```
 
-Errors:
+Add `?wait=true` to hold the request open until the pipeline finishes and get
+the full result in one call (HTTP 200). Convenient for small documents; a large
+PDF will outlast most proxy timeouts.
+
+### `GET /process/{task_id}`
+
+Reports where a task got to. Temporal holds the state, so nothing is stored
+here.
+
+```json
+{ "status": "processing", "task_id": "a1b2c3d4", "workflow_id": "process-pdf-a1b2c3d4" }
+```
+
+Once finished:
+
+```json
+{
+  "status": "completed",
+  "task_id": "a1b2c3d4",
+  "workflow_id": "process-pdf-a1b2c3d4",
+  "pdf_bucket": "temporalpdfs",
+  "pdf_key": "report-a1b2c3d4.pdf",
+  "md_bucket": "parsedmds",
+  "md_key": "report-a1b2c3d4.md",
+  "local_pdf": "/path/to/legal-review-agent/assets/TEMP_PDF/report-a1b2c3d4.pdf",
+  "local_md": "/path/to/legal-review-agent/assets/TEMP_MD/report-a1b2c3d4.md",
+  "markdown_characters": 1843
+}
+```
+
+A task that ended badly reports the terminal state's name: `failed`,
+`terminated`, `timed_out` or `canceled`. An unknown id is a 404.
+
+Because the work is durable, a dropped connection costs you the response but
+never the run: the `task_id` fetches it afterwards.
+
+### Errors
 
 | Status | Cause |
 | --- | --- |
 | `400` | The upload is not a `.pdf`, or the file is empty (`ValidationError`) |
+| `404` | No task with that id |
 | `422` | No form field named `file` was sent, or the PDF could not be parsed (`ParsingError`) |
 | `502` | The object store could not be reached or refused the request (`StorageError`) |
 | `503` | Temporal is unreachable (`TemporalConnectionError`) |
 | `500` | The workflow failed, or anything else |
 
-The response takes a few seconds — two uploads, a parse and a download happen
-before it returns.
+The workflow returns a `ProcessPdfResult` (`schemas/process_pdf_result.py`),
+which both endpoints pass straight through. `workflow_id` is what you look up
+in the Temporal UI.
+
+### Task ids
+
+Every upload gets a `task_id`, generated once in `build_run_artifacts`. It is
+the thread that ties one run together: it names the workflow
+(`process-pdf-<task_id>`), appears in both object keys, is carried in every
+activity's input, and prefixes every log line the run produces.
+
+That is what makes concurrent runs readable. Two uploads at the same time
+interleave in the log, but each stays separable:
+
+```
+[task f54f498f] parsing pdf ...
+[task e296b2ea] parsing pdf ...
+[task f54f498f] uploaded markdown parsedmds/...
+[task e296b2ea] uploaded markdown parsedmds/...
+```
+
+Grepping one task id gives you that run and nothing else.
 
 ## Tests
 
@@ -325,6 +392,88 @@ tests point a worker at a throwaway queue.
 `worker.py` at the project root is only an entrypoint; it exists so that
 `uv run worker.py` puts the project directory on `sys.path`. Running the module
 directly also works: `uv run python -m workers.process_pdf_worker`.
+
+### One directory per worker
+
+Each worker is self-contained, so a new one is a new directory rather than an
+edit to a shared file:
+
+```
+workers/process_pdf_worker/
+    __init__.py                re-exports create_/run_process_pdf_worker
+    __main__.py                so `python -m workers.process_pdf_worker` runs it
+    process_pdf_worker.py      the worker itself
+    Docker/Dockerfile          runs it as a standalone container
+    Docker/docker-compose.yml  same, with a persistent volume
+```
+
+### Running a worker in Docker
+
+The build context is the **project root**, not the Docker directory, because
+the worker imports `activities/`, `workflows/`, `utils/` and friends:
+
+```bash
+docker build -f workers/process_pdf_worker/Docker/Dockerfile -t legal-review-agent-process-pdf-worker .
+```
+
+The image is only the worker: it polls `TEMPORAL_TASK_QUEUE`, serves no HTTP
+and exposes no port. Point it at wherever Temporal actually is, because inside
+a container `localhost` means the container:
+
+```bash
+# Temporal running in Docker (compose network)
+docker run --rm --network temporal-network \
+  --env-file .env -e TEMPORAL_HOST=temporal:7233 \
+  legal-review-agent-process-pdf-worker
+
+# Temporal on the host
+docker run --rm --add-host=host.docker.internal:host-gateway \
+  --env-file .env -e TEMPORAL_HOST=host.docker.internal:7233 \
+  legal-review-agent-process-pdf-worker
+```
+
+Set `RUN_WORKER_IN_API=false` when a container is doing the work, or you will
+be running two workers.
+
+`.env` is written as `KEY=value` with no spaces or quotes, because docker's
+`--env-file` rejects `KEY = value` and passes quotes through literally.
+Settings strips both anyway, but the file has to parse first.
+
+### Persistent scratch space
+
+The activities write PDFs and Markdown to `/app/assets` inside the container.
+Without a volume those files die with the container, so the compose file mounts
+a named volume:
+
+```bash
+docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml up -d --build
+docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml logs -f
+docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml down
+```
+
+The volume is `aiagent_assets`. `down` keeps it; only `down -v` deletes it, so
+rebuilding or replacing the container leaves the files intact.
+
+With `docker run` instead of compose:
+
+```bash
+docker run -d --name legal-review-agent-worker --network temporal-network \
+  -v aiagent_assets:/app/assets \
+  --env-file .env -e TEMPORAL_HOST=temporal:7233 -e RUN_WORKER_IN_API=false \
+  legal-review-agent-process-pdf-worker
+```
+
+To read the files from the host instead, bind-mount the project's own `assets/`
+directory in place of the named volume — `-v "$PWD/assets:/app/assets"` — and
+the paths in an API response then point at real files on your machine.
+
+Worth knowing: the `local_pdf` and `local_md` in a response are paths **inside
+the worker**. With a named volume they are real and durable but not directly
+visible on the host; the copies in S3 are the ones any other process can read.
+
+The compose service sets `restart: unless-stopped`, so a crashed worker comes
+back on its own. An explicit `docker stop` or `docker kill` is treated as
+deliberate and is not undone.
 
 Retry policies live under `enums/RetryPolicy/`, one per file:
 

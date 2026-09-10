@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # every branch, not just main: a feature branch with no CI is a branch
+  # whose checks you only discover are broken at merge time
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 

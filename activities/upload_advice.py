@@ -1,0 +1,41 @@
+import json
+
+from temporalio import activity
+
+from schemas.upload_advice import UploadAdviceInput, UploadAdviceOutput
+from utils.config import get_setting
+from utils.utility import upload_s3_file
+
+
+@activity.defn
+async def upload_advice(payload: UploadAdviceInput) -> UploadAdviceOutput:
+    """Stores finished advice as JSON and reports where it landed."""
+    settings = get_setting()
+    advice = payload.advice
+    key = f"{payload.pdf_key.rsplit('.', 1)[0]}.advice.json"
+
+    activity.logger.info("[task %s] storing advice -> %s/%s", payload.task_id, settings.s3_legal_advice, key)
+
+    document = {
+        "task_id": payload.task_id,
+        "pdf_key": payload.pdf_key,
+        "summary": advice.summary,
+        "key_risks": [
+            {"description": risk.description, "severity": risk.severity.value, "location": risk.location}
+            for risk in advice.key_risks
+        ],
+        "review_decision": advice.review_decision.value,
+        "question": advice.question,
+    }
+
+    try:
+        upload_s3_file(json.dumps(document, indent=2).encode("utf-8"), settings.s3_legal_advice, key)
+    except Exception:
+        activity.logger.exception("[task %s] failed to store advice for %s", payload.task_id, payload.pdf_key)
+        raise
+
+    s3_path = f"s3://{settings.s3_legal_advice}/{key}"
+
+    activity.logger.info("[task %s] stored advice at %s", payload.task_id, s3_path)
+
+    return UploadAdviceOutput(bucket=settings.s3_legal_advice, key=key, s3_path=s3_path)

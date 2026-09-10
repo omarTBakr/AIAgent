@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
+from routes.legal import router as legal_router
 from routes.process import router as process_router
 from utils.config import get_setting
 from utils.logger import get_logger, setup_logging
@@ -38,8 +39,9 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(title="AIAgent", description="PDF -> markdown pipeline", lifespan=lifespan)
+app = FastAPI(title="Legal Review Agent", description="PDF to Markdown and LLM legal review pipelines", lifespan=lifespan)
 app.include_router(process_router)
+app.include_router(legal_router)
 
 
 @app.get("/health")

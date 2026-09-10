@@ -1,12 +1,14 @@
 [project]
-name = "aiagent"
+name = "legal-review-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "PDF to Markdown and LLM legal review pipelines on Temporal"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.43.91",
     "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "json-repair>=0.63.4",
     "pydantic-settings>=2.0",
     "pymupdf4llm>=1.28.2",
     "python-multipart>=0.0.32",
@@ -17,7 +19,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=26.5.1",
-    "httpx>=0.28.1",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",

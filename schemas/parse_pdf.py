@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class ParsePdfInput:
     """Local PDF to convert to Markdown."""
 
+    task_id: str
     local_path: str
 
 

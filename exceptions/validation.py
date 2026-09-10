@@ -11,3 +11,7 @@ class UnsupportedFileTypeError(ValidationError):
 
 class EmptyFileError(ValidationError):
     """The upload contains no bytes."""
+
+
+class TooManyFilesError(ValidationError):
+    """More documents than the pipeline accepts in one request."""

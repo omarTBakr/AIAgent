@@ -8,12 +8,14 @@
 configuration rather than from the call site.
 """
 
+from enums.RetryPolicy.LLMRetryPolicy import LLMRetryPolicy
 from enums.RetryPolicy.ParsingRetryPolicy import ParsingRetryPolicy
 from enums.RetryPolicy.RetryProfile import RetryProfile, get_retry_policy
 from enums.RetryPolicy.StorageRetryPolicy import StorageRetryPolicy
 from enums.RetryPolicy.StrictRetryPolicy import StrictRetryPolicy
 
 __all__ = [
+    "LLMRetryPolicy",
     "ParsingRetryPolicy",
     "RetryProfile",
     "StorageRetryPolicy",
