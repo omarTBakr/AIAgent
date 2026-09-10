@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     temporal_namespace: str = Field("default", description="Temporal namespace the worker and client use")
     temporal_task_queue: str = Field("process_pdf_queue", description="Task queue the workflow and activities are polled from")
     log_level: str = Field("INFO", description="Root log level: DEBUG, INFO, WARNING, ERROR")
+    run_worker_in_api: bool = Field(False, description="Run the Temporal worker inside the API process")
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent / ".env"), env_file_encoding="utf-8", extra="ignore"

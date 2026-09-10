@@ -99,23 +99,33 @@ cp .env.example .env
 | `TEMPORAL_NAMESPACE` | Temporal namespace (default `default`) |
 | `TEMPORAL_TASK_QUEUE` | Task queue for the workflow and activities (default `process_pdf_queue`) |
 | `LOG_LEVEL` | Root log level (default `INFO`) |
+| `RUN_WORKER_IN_API` | Run the worker inside the API process (default `false`) |
 
 Both buckets must already exist; the service does not create them.
 
 ## Running
 
-Three processes: a Temporal server, a worker, and the API.
+With `RUN_WORKER_IN_API=true` the API hosts the worker, so local development
+needs two processes:
 
 ```bash
-# 1. Temporal server (dev server is the quickest option)
-temporal server start-dev
-
-# 2. Worker, in its own terminal
-uv run worker.py
-
-# 3. API, in a third terminal
-uv run main.py
+temporal server start-dev     # 1. Temporal
+uv run main.py                # 2. API, with the worker inside it
 ```
+
+In production leave `RUN_WORKER_IN_API` off and run the worker separately, so a
+slow parse cannot starve request handling and in-flight work survives an API
+restart:
+
+```bash
+temporal server start-dev     # 1. Temporal
+uv run worker.py              # 2. Worker
+uv run main.py                # 3. API
+```
+
+Startup fails loudly if `RUN_WORKER_IN_API` is set and Temporal cannot be
+reached: an API that was asked to host a worker but has none would accept
+uploads that nothing ever picks up.
 
 The API comes up on `http://127.0.0.1:8000`, with interactive docs at
 `http://127.0.0.1:8000/docs`, and the Temporal web UI on
@@ -187,6 +197,7 @@ tests/test_temporal_client.py
 tests/test_enums.py      the retry policies and their relative tuning
 tests/test_create_worker.py
                          worker wiring: task queue, client, registrations
+tests/test_lifespan.py   the in-API worker starting, stopping and failing
 tests/test_routes.py     /health and /process, including the 400/422/500 paths
 tests/test_activities.py the five activities via Temporal's ActivityEnvironment
 tests/test_schemas.py    schemas survive Temporal's data converter round trip
