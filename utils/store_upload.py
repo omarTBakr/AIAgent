@@ -47,3 +47,28 @@ async def store_upload(pdf: bytes, filename: str, settings: Settings) -> StoredU
     logger.info("[task %s] stored %s/%s", task_id, settings.s3_pdf_bucket, pdf_key)
 
     return StoredUpload(task_id=task_id, pdf_key=pdf_key, md_key=md_key, local_pdf=str(local_pdf))
+
+
+async def store_uploads(files: list[tuple[str, bytes]], settings: Settings) -> tuple[str, list[str]]:
+    """
+    Stores several PDFs under one shared task id.
+
+    Every document in a batch belongs to the same review, so they share the id
+    that names the workflow, and each gets its own key derived from its
+    filename. Returns (task_id, pdf_keys).
+    """
+    if not files:
+        raise EmptyFileError("no files were uploaded")
+
+    task_id = ""
+    pdf_keys = []
+
+    for filename, pdf in files:
+        stored = await store_upload(pdf, filename, settings)
+        # the first document's id names the whole review
+        task_id = task_id or stored.task_id
+        pdf_keys.append(stored.pdf_key)
+
+    logger.info("[task %s] stored %d document(s)", task_id, len(pdf_keys))
+
+    return task_id, pdf_keys

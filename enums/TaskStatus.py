@@ -12,6 +12,7 @@ class TaskStatus(Enum):
     """
 
     PROCESSING = "processing"
+    AWAITING_HUMAN = "awaiting_human"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELED = "canceled"
@@ -30,4 +31,9 @@ class TaskStatus(Enum):
 
     @property
     def is_finished(self) -> bool:
-        return self is not TaskStatus.PROCESSING
+        return self not in _IN_PROGRESS
+
+
+# AWAITING_HUMAN never comes from Temporal; the workflow query reports it, and
+# the task is still running while it waits.
+_IN_PROGRESS = (TaskStatus.PROCESSING, TaskStatus.AWAITING_HUMAN)

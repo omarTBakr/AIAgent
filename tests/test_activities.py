@@ -79,7 +79,14 @@ async def test_activities_round_trip_through_both_buckets(env, s3, settings, pdf
 
 
 def test_all_activities_are_registered():
-    assert len(ALL_ACTIVITIES) == 5
+    """Every activity in the package is registered exactly once."""
+    from activities import LEGAL_ACTIVITIES, PDF_ACTIVITIES
+
+    assert len(PDF_ACTIVITIES) == 5
+    assert len(LEGAL_ACTIVITIES) == 6
+    # download_pdf is in both pipelines but registered once overall
+    assert len(ALL_ACTIVITIES) == 10
+    assert len(set(ALL_ACTIVITIES)) == len(ALL_ACTIVITIES)
 
 
 @pytest.mark.parametrize("fn", ALL_ACTIVITIES)

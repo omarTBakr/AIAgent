@@ -37,6 +37,10 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # then the source, which changes far more often
 COPY --chown=worker:worker activities/ ./activities/
+# activities/__init__.py imports every activity, including the LLM ones, so
+# these are needed even though this worker never calls them
+COPY --chown=worker:worker interfaces/ ./interfaces/
+COPY --chown=worker:worker prompts/ ./prompts/
 COPY --chown=worker:worker enums/ ./enums/
 COPY --chown=worker:worker exceptions/ ./exceptions/
 COPY --chown=worker:worker parsers/ ./parsers/

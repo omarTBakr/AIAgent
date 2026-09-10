@@ -36,8 +36,23 @@ def test_values_are_lowercase_strings(status):
     assert status.value == status.value.lower()
 
 
-def test_only_processing_is_unfinished():
-    assert TaskStatus.PROCESSING.is_finished is False
+IN_PROGRESS = (TaskStatus.PROCESSING, TaskStatus.AWAITING_HUMAN)
+
+
+def test_in_progress_states_are_unfinished():
+    """A task waiting on a human is still running, not done."""
+    for status in IN_PROGRESS:
+        assert status.is_finished is False
+
+
+def test_every_other_state_is_finished():
     for status in TaskStatus:
-        if status is not TaskStatus.PROCESSING:
+        if status not in IN_PROGRESS:
             assert status.is_finished is True
+
+
+def test_awaiting_human_never_comes_from_temporal():
+    """It is reported by the workflow query, not by Temporal's own enum."""
+    from temporalio.client import WorkflowExecutionStatus
+
+    assert all(TaskStatus.from_temporal(s) is not TaskStatus.AWAITING_HUMAN for s in WorkflowExecutionStatus)

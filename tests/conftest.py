@@ -1,9 +1,16 @@
+import asyncio
+import json
+
 import pymupdf
 import pytest
 from botocore.exceptions import ClientError
 
+import interfaces.llm_factory
 import utils.config
 import utils.utility
+from enums.LLMProvider import LLMProvider
+from enums.PromptName import PromptName
+from interfaces.llm_interface import LLMInterface
 
 
 @pytest.fixture(autouse=True)
@@ -28,13 +35,23 @@ def settings(tmp_path, monkeypatch):
         "TEMP_MD_FOLDER": "TEMP_MD",
         "API_HOST": "127.0.0.1",
         "API_PORT": "9999",
+        "LLM_PROVIDER": "openrouter",
+        "OPENROUTER_API_KEY": "test-llm-key",
+        "OPENROUTER_MODEL": "test/model",
+        "S3_LEGAL_ADVICE": "test-advice",
+        "LEGAL_TASK_QUEUE": "test-legal-queue",
+        "LEGAL_MAX_CONCURRENT_PDFS": "2",
+        "LEGAL_PAGES_PER_BATCH": "2",
+        "LEGAL_MAX_PDFS": "5",
+        "HUMAN_INPUT_TIMEOUT_SECONDS": "5",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)
 
-    # both modules cache singletons, so clear them between tests
+    # these modules cache singletons, so clear them between tests
     monkeypatch.setattr(utils.config, "_settings_instance", None)
     monkeypatch.setattr(utils.utility, "_s3_client", None)
+    monkeypatch.setattr(interfaces.llm_factory, "_instances", {})
 
     return utils.config.get_setting()
 
@@ -74,6 +91,78 @@ def pdf_bytes():
     page = doc.new_page()
     page.insert_text((72, 100), "Quarterly Report", fontsize=22)
     page.insert_text((72, 140), "Revenue grew 12 percent this quarter.", fontsize=11)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+class FakeLLM(LLMInterface):
+    """
+    Stands in for a real model.
+
+    Returns a scripted reply per prompt name, records what it was asked, and
+    tracks how many calls are in flight at once so a test can assert the
+    workflow's concurrency cap.
+    """
+
+    def __init__(self):
+        self.replies = {}
+        self.calls = []
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self.delay = 0.0
+        self.error = None
+
+    def script(self, name: PromptName, reply):
+        """`reply` is a dict (serialised to JSON) or a raw string."""
+        self.replies[name] = reply
+
+    async def complete(self, prompt, **variables) -> str:
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            self.calls.append({"prompt": prompt.name, "variables": variables})
+
+            if self.delay:
+                await asyncio.sleep(self.delay)
+            if self.error is not None:
+                raise self.error
+
+            reply = self.replies.get(prompt.name, DEFAULT_ADVICE)
+            return reply if isinstance(reply, str) else json.dumps(reply)
+        finally:
+            self.in_flight -= 1
+
+    def calls_for(self, name: PromptName) -> list:
+        return [call for call in self.calls if call["prompt"] is name]
+
+
+DEFAULT_ADVICE = {
+    "summary": "A short services agreement.",
+    "key_risks": [
+        {"description": "Unlimited liability", "severity": "high", "location": "clause 9"},
+    ],
+    "needs_human": False,
+    "question": "",
+}
+
+
+@pytest.fixture
+def llm(monkeypatch):
+    """Installs a FakeLLM for every provider the factory might be asked for."""
+    fake = FakeLLM()
+    monkeypatch.setattr(interfaces.llm_factory, "_instances", {provider: fake for provider in LLMProvider})
+    return fake
+
+
+@pytest.fixture
+def multi_page_pdf_bytes():
+    """A six-page PDF, so LEGAL_PAGES_PER_BATCH=2 yields three batches."""
+    doc = pymupdf.open()
+    for page_number in range(1, 7):
+        page = doc.new_page()
+        page.insert_text((72, 100), f"Clause {page_number}", fontsize=20)
+        page.insert_text((72, 140), f"Body text for clause {page_number}.", fontsize=11)
     data = doc.tobytes()
     doc.close()
     return data
