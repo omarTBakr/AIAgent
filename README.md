@@ -402,6 +402,7 @@ workers/process_pdf_worker/
     __main__.py                so `python -m workers.process_pdf_worker` runs it
     process_pdf_worker.py      the worker itself
     Docker/Dockerfile          runs it as a standalone container
+    Docker/docker-compose.yml  same, with a persistent volume
 ```
 
 ### Running a worker in Docker
@@ -436,8 +437,41 @@ be running two workers.
 `--env-file` rejects `KEY = value` and passes quotes through literally.
 Settings strips both anyway, but the file has to parse first.
 
-The scratch directory is `/app/assets` inside the container; mount a volume
-there if you want the intermediate files to outlive it.
+### Persistent scratch space
+
+The activities write PDFs and Markdown to `/app/assets` inside the container.
+Without a volume those files die with the container, so the compose file mounts
+a named volume:
+
+```bash
+docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml up -d --build
+docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml logs -f
+docker compose -f workers/process_pdf_worker/Docker/docker-compose.yml down
+```
+
+The volume is `aiagent_assets`. `down` keeps it; only `down -v` deletes it, so
+rebuilding or replacing the container leaves the files intact.
+
+With `docker run` instead of compose:
+
+```bash
+docker run -d --name aiagent-worker --network temporal-network \
+  -v aiagent_assets:/app/assets \
+  --env-file .env -e TEMPORAL_HOST=temporal:7233 -e RUN_WORKER_IN_API=false \
+  aiagent-process-pdf-worker
+```
+
+To read the files from the host instead, bind-mount the project's own `assets/`
+directory in place of the named volume — `-v "$PWD/assets:/app/assets"` — and
+the paths in an API response then point at real files on your machine.
+
+Worth knowing: the `local_pdf` and `local_md` in a response are paths **inside
+the worker**. With a named volume they are real and durable but not directly
+visible on the host; the copies in S3 are the ones any other process can read.
+
+The compose service sets `restart: unless-stopped`, so a crashed worker comes
+back on its own. An explicit `docker stop` or `docker kill` is treated as
+deliberate and is not undone.
 
 Retry policies live under `enums/RetryPolicy/`, one per file:
 
