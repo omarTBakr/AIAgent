@@ -40,7 +40,8 @@ class LegalReviewWorkflow:
 
     At most `max_concurrent_pdfs` documents are in flight at once. The limit
     lives here rather than in worker configuration, so it holds however many
-    worker processes are running.
+    worker processes are running. A document waiting on a human is not in
+    flight: it gives its slot back for the wait.
     """
 
     def __init__(self) -> None:
@@ -91,20 +92,30 @@ class LegalReviewWorkflow:
 
             advice = await self._advise(payload, pdf_key, split.batches)
 
-            if advice.needs_human:
-                advice = await self._ask_a_human(payload, pdf_key, advice)
+        if advice.needs_human:
+            # waiting on a person is not work, so the slot is given back for the
+            # wait; otherwise two open questions would stall every other document
+            answer = await self._wait_for_answer(payload, pdf_key, advice.question)
 
-            stored = await workflow.execute_activity(
-                upload_advice,
-                UploadAdviceInput(task_id=payload.task_id, pdf_key=pdf_key, advice=advice),
-                start_to_close_timeout=STORAGE_TIMEOUT,
-                retry_policy=StorageRetryPolicy(),
-            )
-            advice.s3_path = stored.s3_path
+            if answer is None:
+                # a timeout must not lose the work already done, so the draft
+                # is kept, flagged, rather than discarded
+                advice.review_decision = ReviewDecision.UNREVIEWED_TIMEOUT
+            else:
+                async with gate:
+                    advice = await self._revise(payload, pdf_key, advice, answer)
 
-            self._progress[pdf_key] = TaskStatus.COMPLETED.value
+        stored = await workflow.execute_activity(
+            upload_advice,
+            UploadAdviceInput(task_id=payload.task_id, pdf_key=pdf_key, advice=advice),
+            start_to_close_timeout=STORAGE_TIMEOUT,
+            retry_policy=StorageRetryPolicy(),
+        )
+        advice.s3_path = stored.s3_path
 
-            return DocumentAdvice(pdf_key=pdf_key, advice=advice)
+        self._progress[pdf_key] = TaskStatus.COMPLETED.value
+
+        return DocumentAdvice(pdf_key=pdf_key, advice=advice)
 
     async def _advise(self, payload: LegalReviewInput, pdf_key: str, batches: list) -> LegalAdvice:
         """One LLM call per batch, then a merge. Batches run in order."""
@@ -128,18 +139,17 @@ class LegalReviewWorkflow:
 
         return merged.advice
 
-    async def _ask_a_human(self, payload: LegalReviewInput, pdf_key: str, advice: LegalAdvice) -> LegalAdvice:
+    async def _wait_for_answer(self, payload: LegalReviewInput, pdf_key: str, question: str) -> str | None:
         """
         Blocks this document until somebody answers, or the wait runs out.
 
-        Only this document waits: the semaphore is still held, but the other
-        in-flight document carries on, and a timeout must not lose the work
-        already done, so the draft is returned flagged rather than discarded.
+        Returns the answer, or None when nobody replied in time. Called without
+        a concurrency slot, so the other documents keep moving meanwhile.
         """
-        self._pending[pdf_key] = advice.question
+        self._pending[pdf_key] = question
         self._progress[pdf_key] = TaskStatus.AWAITING_HUMAN.value
 
-        workflow.logger.info("[task %s] %s is waiting on a human: %s", payload.task_id, pdf_key, advice.question)
+        workflow.logger.info("[task %s] %s is waiting on a human: %s", payload.task_id, pdf_key, question)
 
         try:
             await workflow.wait_condition(
@@ -148,15 +158,15 @@ class LegalReviewWorkflow:
             )
         except TimeoutError:
             workflow.logger.warning("[task %s] nobody answered for %s; continuing unreviewed", payload.task_id, pdf_key)
+            return None
+        finally:
             self._pending.pop(pdf_key, None)
             self._progress[pdf_key] = TaskStatus.PROCESSING.value
-            advice.review_decision = ReviewDecision.UNREVIEWED_TIMEOUT
-            return advice
 
-        answer = self._answers[pdf_key]
-        self._pending.pop(pdf_key, None)
-        self._progress[pdf_key] = TaskStatus.PROCESSING.value
+        return self._answers[pdf_key]
 
+    async def _revise(self, payload: LegalReviewInput, pdf_key: str, advice: LegalAdvice, answer: str) -> LegalAdvice:
+        """Asks the model to revise its draft in light of the human's answer."""
         revised = await workflow.execute_activity(
             human_followup,
             HumanFollowupInput(

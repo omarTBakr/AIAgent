@@ -230,6 +230,35 @@ async def test_an_answer_for_an_unknown_document_is_ignored(worker, s3, settings
     assert result.document_count == 1
 
 
+async def test_a_document_waiting_on_a_human_gives_up_its_slot(worker, s3, settings, llm, multi_page_pdf_bytes):
+    """
+    With one slot and two documents that both have questions, the second must
+    still get analysed while the first waits; if the wait held the slot, only
+    one question could ever be pending and this would never finish.
+    """
+    keys = stock_the_bucket(s3, settings, multi_page_pdf_bytes, 2)
+    llm.script(PromptName.LEGAL_ADVICE, NEEDS_HUMAN)
+    llm.script(PromptName.MERGE_ADVICE, NEEDS_HUMAN)
+    llm.script(PromptName.HUMAN_FOLLOWUP, {"summary": "Revised.", "key_risks": []})
+    llm.delay = 0.05
+
+    handle = await start(worker, keys, max_concurrent_pdfs=1)
+
+    async def both_questions_arrive():
+        while len(await handle.query(LegalReviewWorkflow.pending_questions)) < 2:
+            await asyncio.sleep(0.05)
+
+    await asyncio.wait_for(both_questions_arrive(), timeout=30)
+
+    for key in keys:
+        await handle.signal(LegalReviewWorkflow.human_response, args=[key, "English law"])
+
+    result = await handle.result()
+    assert {doc.advice.review_decision for doc in result.documents} == {ReviewDecision.HUMAN_APPROVED}
+    # taking the slot back for the revision keeps the cap
+    assert llm.max_in_flight == 1
+
+
 # --- failures ------------------------------------------------------------
 
 
