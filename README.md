@@ -50,6 +50,11 @@ utils/utility.py             get_s3_client, upload_s3_file, download_s3_file,
 utils/temporal_client.py     get_temporal_client
 utils/config.py              pydantic-settings Settings, loaded from .env
 utils/logger.py              setup_logging, get_logger
+utils/store_upload.py        validate_upload, store_upload
+utils/responses.py           the JSON bodies both endpoints return
+utils/http_errors.py         exception -> HTTP status mapping
+utils/workflow_ids.py        task id <-> workflow id
+enums/TaskStatus.py          the states a task is reported in
 parsers/pymupdf_parser.py    parse_pdf, parse_pdf_to_file
 exceptions/                  the project's exception hierarchy
 tests/                       pytest suite (offline, no credentials needed)
