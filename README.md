@@ -16,6 +16,41 @@ A FastAPI service with two Temporal pipelines over S3-compatible object storage:
 Each pipeline is a Temporal workflow on its own task queue, served by its own
 worker, and a browser UI served by the API drives the legal review.
 
+## Contents
+
+- [Screenshots](#screenshots)
+- [How it works](#how-it-works)
+  - [PDF to Markdown](#pdf-to-markdown)
+  - [Legal review](#legal-review)
+- [Layout](#layout)
+- [Requirements](#requirements)
+- [Setup](#setup)
+  - [Environment variables](#environment-variables)
+- [Running](#running)
+  - [Locally](#locally)
+  - [With the workers in Docker](#with-the-workers-in-docker)
+  - [Ports](#ports)
+  - [Browser UI](#browser-ui)
+- [API](#api)
+  - [`GET /health`](#get-health)
+  - [`POST /process`](#post-process)
+  - [`GET /process/{task_id}`](#get-processtask_id)
+  - [`POST /legal`](#post-legal)
+  - [`GET /legal/{task_id}`](#get-legaltask_id)
+  - [`POST /legal/{task_id}/respond`](#post-legaltask_idrespond)
+  - [Errors](#errors)
+  - [Task ids](#task-ids)
+- [Tests](#tests)
+- [Code quality](#code-quality)
+- [Exceptions](#exceptions)
+- [Temporal activities](#temporal-activities)
+  - [Logging](#logging)
+  - [The workflow](#the-workflow)
+  - [One directory per worker](#one-directory-per-worker)
+  - [Running a worker in Docker](#running-a-worker-in-docker)
+  - [Persistent scratch space](#persistent-scratch-space)
+- [License](#license)
+
 ## Screenshots
 
 The browser UI with a finished review: the totals and risks by severity, then
@@ -850,4 +885,4 @@ git clone https://github.com/temporalio/samples-server.git setup/samples-server
 
 ## License
 
-Not yet specified.
+Released under the [MIT License](LICENSE).
