@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Legal Review Agent</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
+  <link rel="stylesheet" href="/ui/styles.css">
+  <script src="/ui/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/new">
+      <span class="brand-mark" aria-hidden="true">§</span>
+      <span class="brand-text">
+        <span class="brand-name">Legal Review Agent</span>
+        <span class="brand-tag">Contract risk review with a human in the loop</span>
+      </span>
+    </a>
+    <div id="api-status" class="api-status" data-state="checking" role="status">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="status-text">Checking API…</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Reviews">
+      <a class="button primary block" href="#/new">New review</a>
+
+      <form id="open-form" class="panel open-form">
+        <label for="open-task">Open a review</label>
+        <div class="input-row">
+          <input id="open-task" name="task" autocomplete="off" spellcheck="false" placeholder="Task id">
+          <button class="button" type="submit">Open</button>
+        </div>
+      </form>
+
+      <section class="panel recent-panel">
+        <div class="section-head">
+          <h2>Recent</h2>
+          <button id="clear-recent" class="link-button" type="button" hidden>Clear</button>
+        </div>
+        <ul id="recent" class="recent"></ul>
+        <p id="recent-empty" class="muted small">Reviews you start or open in this browser show up here.</p>
+      </section>
+    </aside>
+
+    <main id="main" class="main" tabindex="-1">
+      <noscript>
+        <section class="panel">This page needs JavaScript. The API itself is documented at <a href="/docs">/docs</a>.</section>
+      </noscript>
+    </main>
+  </div>
+</body>
+</html>
