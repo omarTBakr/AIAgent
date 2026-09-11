@@ -51,6 +51,8 @@ class LegalReviewWorkflow:
         self._answers: dict[str, str] = {}
         # pdf_key -> where each document has got to
         self._progress: dict[str, str] = {}
+        # pdf_key -> finished advice, in the order documents finished
+        self._finished: dict[str, DocumentAdvice] = {}
 
     @workflow.run
     async def run(self, payload: LegalReviewInput) -> LegalReviewResult:
@@ -113,9 +115,12 @@ class LegalReviewWorkflow:
         )
         advice.s3_path = stored.s3_path
 
+        document = DocumentAdvice(pdf_key=pdf_key, advice=advice)
+        # published the moment it exists, so nobody waits for the slowest document
+        self._finished[pdf_key] = document
         self._progress[pdf_key] = TaskStatus.COMPLETED.value
 
-        return DocumentAdvice(pdf_key=pdf_key, advice=advice)
+        return document
 
     async def _advise(self, payload: LegalReviewInput, pdf_key: str, batches: list) -> LegalAdvice:
         """One LLM call per batch, then a merge. Batches run in order."""
@@ -197,3 +202,13 @@ class LegalReviewWorkflow:
     def progress(self) -> dict:
         """Where each document has got to."""
         return dict(self._progress)
+
+    @workflow.query
+    def finished_documents(self) -> list[DocumentAdvice]:
+        """
+        Advice for every document done so far, in the order they finished.
+
+        The run's result only exists once every document is done; this is how
+        a caller reads the first ones while the rest are still in flight.
+        """
+        return list(self._finished.values())

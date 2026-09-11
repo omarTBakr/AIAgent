@@ -44,12 +44,14 @@ def completed_response(result: LegalReviewResult) -> dict:
     }
 
 
-def running_response(task_id: str, progress: dict, questions: list[dict]) -> dict:
+def running_response(task_id: str, progress: dict, questions: list[dict], finished: list | None = None) -> dict:
     """
     A review still in progress.
 
     Reports AWAITING_HUMAN when anything is blocked on a person, because that
-    is the state a caller has to act on rather than wait out.
+    is the state a caller has to act on rather than wait out. `results` holds
+    the advice for documents already done, so they can be read before the
+    rest of the review finishes.
     """
     status = TaskStatus.AWAITING_HUMAN if questions else TaskStatus.PROCESSING
 
@@ -59,6 +61,7 @@ def running_response(task_id: str, progress: dict, questions: list[dict]) -> dic
         "workflow_id": legal_workflow_id_for(task_id),
         "documents": progress,
         "pending_questions": questions,
+        "results": [advice_body(doc.pdf_key, doc.advice) for doc in finished or []],
     }
 
 

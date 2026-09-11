@@ -47,13 +47,18 @@ class StubHandle:
         result=RESULT,
         questions=None,
         progress=None,
+        finished=None,
         signal_error=None,
         signals=None,
     ):
         self.id = workflow_id
         self._status = status
         self._result = result
-        self._queries = {"pending_questions": questions or [], "progress": progress or {}}
+        self._queries = {
+            "pending_questions": questions or [],
+            "progress": progress or {},
+            "finished_documents": finished or [],
+        }
         self._signal_error = signal_error
         self._signals = signals if signals is not None else []
 
@@ -189,6 +194,22 @@ def test_status_while_running(client, temporal):
     assert body["status"] == "processing"
     assert body["documents"] == {"a.pdf": "processing", "b.pdf": "completed"}
     assert body["pending_questions"] == []
+    assert body["results"] == []
+
+
+def test_status_while_running_includes_documents_already_done(client, temporal):
+    """A finished document is readable before the slowest one is."""
+    temporal.handle_kwargs = {
+        "progress": {"contract-abc123.pdf": "completed", "b.pdf": "processing"},
+        "finished": RESULT.documents,
+    }
+
+    body = client.get("/legal/abc123").json()
+
+    assert body["status"] == "processing"
+    assert [doc["pdf_key"] for doc in body["results"]] == ["contract-abc123.pdf"]
+    assert body["results"][0]["summary"] == "A services agreement."
+    assert body["results"][0]["key_risks"][0]["severity"] == "high"
 
 
 def test_status_reports_a_question_waiting_on_a_human(client, temporal):
