@@ -9,8 +9,8 @@ class LegalReviewInput:
 
     task_id: str
     pdf_keys: list[str]
-    pages_per_batch: int = 10
-    max_concurrent_pdfs: int = 2
+    pages_per_batch: int = 30
+    max_concurrent_pdfs: int = 10
     human_input_timeout_seconds: float = 3600
 
 

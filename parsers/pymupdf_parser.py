@@ -1,9 +1,15 @@
+import threading
 from pathlib import Path
 
 import pymupdf
 import pymupdf4llm
 
 from exceptions.parsing import InvalidPdfError, PdfNotFoundError
+
+# PyMuPDF is not thread-safe. Activities parse in a thread so the event loop
+# stays free while several documents are in flight, so every use of it goes
+# through this lock: one parse at a time, however many threads ask.
+_PYMUPDF_LOCK = threading.Lock()
 
 
 def parse_pdf(source: Path | str | bytes, **kwargs):
@@ -17,23 +23,24 @@ def parse_pdf(source: Path | str | bytes, **kwargs):
     Returns a Markdown string, or a list of per-page dicts when the caller
     passes page_chunks=True.
     """
-    try:
-        if isinstance(source, bytes):
-            doc = pymupdf.open(stream=source, filetype="pdf")
-        else:
-            source = Path(source)
-            if not source.is_file():
-                raise PdfNotFoundError(f"cannot parse, no such file: {source}")
-            doc = pymupdf.open(source)
-    except pymupdf.FileDataError as exc:
-        raise InvalidPdfError(f"not a readable PDF: {source!r}") from exc
+    with _PYMUPDF_LOCK:
+        try:
+            if isinstance(source, bytes):
+                doc = pymupdf.open(stream=source, filetype="pdf")
+            else:
+                source = Path(source)
+                if not source.is_file():
+                    raise PdfNotFoundError(f"cannot parse, no such file: {source}")
+                doc = pymupdf.open(source)
+        except pymupdf.FileDataError as exc:
+            raise InvalidPdfError(f"not a readable PDF: {source!r}") from exc
 
-    try:
-        return pymupdf4llm.to_markdown(doc, **kwargs)
-    except Exception as exc:
-        raise InvalidPdfError(f"could not convert the PDF to markdown: {exc}") from exc
-    finally:
-        doc.close()
+        try:
+            return pymupdf4llm.to_markdown(doc, **kwargs)
+        except Exception as exc:
+            raise InvalidPdfError(f"could not convert the PDF to markdown: {exc}") from exc
+        finally:
+            doc.close()
 
 
 def parse_pdf_to_file(source: Path | str | bytes, destination: Path | str, **kwargs) -> Path:

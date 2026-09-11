@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     # LLM
     llm_provider: str = Field("openrouter", description="Which LLMInterface implementation the factory returns")
-    llm_timeout_seconds: float = Field(120, description="Per-call timeout for an LLM request")
-    llm_max_tokens: int = Field(4096, description="Maximum tokens the model may generate")
+    llm_timeout_seconds: float = Field(300, description="Per-call timeout for an LLM request")
+    llm_max_tokens: int = Field(16000, description="Maximum tokens the model may generate")
     llm_temperature: float = Field(0.2, description="Sampling temperature; legal advice wants determinism")
     openrouter_api_key: str = Field("", description="OpenRouter API key")
     openrouter_model: str = Field("deepseek/deepseek-v4-flash", description="OpenRouter model id")
@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     # legal advice pipeline
     s3_legal_advice: str = Field("legaladvice", description="Bucket the advice JSON lands in")
     legal_task_queue: str = Field("legal_advice_queue", description="Task queue for the legal review workflow")
-    legal_max_concurrent_pdfs: int = Field(2, description="How many PDFs the workflow processes at once")
-    legal_pages_per_batch: int = Field(10, description="Pages per LLM call")
+    legal_max_concurrent_pdfs: int = Field(10, description="How many PDFs the workflow processes at once")
+    legal_pages_per_batch: int = Field(30, description="Pages per LLM call")
     legal_max_pdfs: int = Field(20, description="Most PDFs accepted in one request")
     human_input_timeout_seconds: float = Field(3600, description="How long to wait for a human before continuing")
 

@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from temporalio import activity
@@ -29,7 +30,9 @@ async def upload_advice(payload: UploadAdviceInput) -> UploadAdviceOutput:
     }
 
     try:
-        upload_s3_file(json.dumps(document, indent=2).encode("utf-8"), settings.s3_legal_advice, key)
+        # boto3 blocks; keep the event loop free for the other documents in flight
+        body = json.dumps(document, indent=2).encode("utf-8")
+        await asyncio.to_thread(upload_s3_file, body, settings.s3_legal_advice, key)
     except Exception:
         activity.logger.exception("[task %s] failed to store advice for %s", payload.task_id, payload.pdf_key)
         raise

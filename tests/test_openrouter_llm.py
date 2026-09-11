@@ -55,6 +55,7 @@ async def test_the_request_carries_the_model_and_both_messages(settings):
     assert [m["role"] for m in seen["messages"]] == ["system", "user"]
     assert "contract.pdf" in seen["messages"][1]["content"]
     assert seen["temperature"] == settings.llm_temperature
+    assert seen["max_tokens"] == settings.llm_max_tokens
     assert seen["response_format"] == {"type": "json_object"}
 
 
@@ -85,6 +86,14 @@ async def test_a_429_is_a_rate_limit_error(settings):
     llm = client_returning(lambda request: httpx.Response(429, json={}), settings)
 
     with pytest.raises(LLMRateLimitError):
+        await llm.complete(get_prompt(PromptName.LEGAL_ADVICE), **PROMPT_VARS)
+
+
+async def test_a_402_says_the_account_is_out_of_credits(settings):
+    """OpenRouter answers 402 both for an empty balance and for too many requests in flight on a small one."""
+    llm = client_returning(lambda request: httpx.Response(402, json={"error": {"message": "insufficient credits"}}), settings)
+
+    with pytest.raises(LLMError, match="lack of credits"):
         await llm.complete(get_prompt(PromptName.LEGAL_ADVICE), **PROMPT_VARS)
 
 
@@ -134,6 +143,23 @@ async def test_an_empty_message_is_a_response_error(settings):
 
     with pytest.raises(LLMResponseError, match="empty message"):
         await llm.complete(get_prompt(PromptName.LEGAL_ADVICE), **PROMPT_VARS)
+
+
+async def test_a_reply_cut_off_at_max_tokens_is_rejected_not_repaired(settings):
+    """Repair would turn a truncated reply into advice with every unwritten risk missing."""
+    truncated = '{"summary": "ok", "key_risks": [{"description": "Unlimited liab'
+    body = {"choices": [{"message": {"content": truncated}, "finish_reason": "length"}]}
+    llm = client_returning(lambda request: httpx.Response(200, json=body), settings)
+
+    with pytest.raises(LLMResponseError, match="cut off at LLM_MAX_TOKENS"):
+        await llm.complete_json(get_prompt(PromptName.LEGAL_ADVICE), **PROMPT_VARS)
+
+
+async def test_a_reply_that_finished_normally_is_accepted(settings):
+    body = {"choices": [{"message": {"content": '{"summary": "ok"}'}, "finish_reason": "stop"}]}
+    llm = client_returning(lambda request: httpx.Response(200, json=body), settings)
+
+    assert await llm.complete(get_prompt(PromptName.LEGAL_ADVICE), **PROMPT_VARS) == '{"summary": "ok"}'
 
 
 async def test_a_non_json_body_is_a_response_error(settings):
