@@ -65,6 +65,13 @@ class OpenRouterLLM(LLMInterface):
         if response.status_code == 429:
             raise LLMRateLimitError(f"OpenRouter is throttling {self.model}")
 
+        if response.status_code == 402:
+            # OpenRouter reserves credit for every request in flight, so a small
+            # balance also fails this way when many documents run at once
+            raise LLMError(
+                f"OpenRouter declined {self.model} for lack of credits (402): add credits, or lower LEGAL_MAX_CONCURRENT_PDFS"
+            )
+
         if response.status_code >= 400:
             raise LLMError(f"OpenRouter returned {response.status_code}: {response.text[:200]}")
 
@@ -82,9 +89,15 @@ class OpenRouterLLM(LLMInterface):
             raise LLMError(f"OpenRouter reported an error: {body['error']}")
 
         try:
-            content = body["choices"][0]["message"]["content"]
+            choice = body["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMResponseError(f"unexpected OpenRouter response shape: {str(body)[:200]}") from exc
+
+        if choice.get("finish_reason") == "length":
+            # a cut-off reply is still mostly valid JSON, and repairing it would
+            # quietly drop every risk the model had not written yet
+            raise LLMResponseError("the reply was cut off at LLM_MAX_TOKENS: raise it, or lower LEGAL_PAGES_PER_BATCH")
 
         if not content:
             raise LLMResponseError("OpenRouter returned an empty message")

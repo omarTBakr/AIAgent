@@ -1,7 +1,10 @@
 """Each legal activity through Temporal's ActivityEnvironment, with the FakeLLM
 standing in for the model."""
 
+import asyncio
+import importlib
 import json
+import time
 
 import pytest
 from temporalio.testing import ActivityEnvironment
@@ -62,6 +65,38 @@ async def test_split_pages_keeps_the_document_text(env, multi_page_pdf_bytes, tm
 
     joined = " ".join(b.markdown for b in result.batches)
     assert "Clause 1" in joined and "Clause 6" in joined
+
+
+async def test_split_pages_does_not_block_the_event_loop(env, monkeypatch):
+    """With several documents in flight, one parse must not stall the model calls of the others."""
+
+    def slow_parse(source):
+        time.sleep(0.3)
+        return ["page one"]
+
+    # the package re-exports the activity function under the module's name
+    monkeypatch.setattr(importlib.import_module("activities.split_pages"), "parse_pdf_pages", slow_parse)
+
+    ticks = 0
+
+    async def tick():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    ticker = asyncio.create_task(tick())
+    try:
+        result = await env.run(
+            split_pages,
+            SplitPagesInput(task_id="t1", pdf_key="contract.pdf", local_pdf="unused.pdf", pages_per_batch=10),
+        )
+    finally:
+        ticker.cancel()
+
+    assert result.page_count == 1
+    # a parse run on the loop itself would leave the ticker where it started
+    assert ticks >= 10
 
 
 # --- analyze_batch -------------------------------------------------------

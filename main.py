@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from routes.legal import router as legal_router
 from routes.process import router as process_router
@@ -10,6 +13,9 @@ from utils.logger import get_logger, setup_logging
 from workers.process_pdf_worker import create_process_pdf_worker
 
 logger = get_logger(__name__)
+
+# the browser UI: static files, no build step
+UI_DIR = Path(__file__).parent / "ui"
 
 
 @asynccontextmanager
@@ -47,6 +53,15 @@ app.include_router(legal_router)
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+async def index() -> RedirectResponse:
+    """The browser UI lives under /ui."""
+    return RedirectResponse(url="/ui/")
+
+
+app.mount("/ui", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
 
 def main():

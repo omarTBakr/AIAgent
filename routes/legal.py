@@ -98,7 +98,8 @@ async def review_status(task_id: str) -> dict:
             # queries reach the running workflow, so the questions are live
             questions = await handle.query(LegalReviewWorkflow.pending_questions)
             progress = await handle.query(LegalReviewWorkflow.progress)
-            return running_response(task_id, progress, questions)
+            finished = await handle.query(LegalReviewWorkflow.finished_documents)
+            return running_response(task_id, progress, questions, finished)
 
         return status_response(task_id, status)
 

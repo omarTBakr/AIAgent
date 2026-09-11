@@ -259,6 +259,42 @@ async def test_a_document_waiting_on_a_human_gives_up_its_slot(worker, s3, setti
     assert llm.max_in_flight == 1
 
 
+async def test_each_document_is_published_as_soon_as_it_finishes(worker, s3, settings, llm, multi_page_pdf_bytes):
+    """A finished document's advice must be readable while another is still in flight."""
+    keys = stock_the_bucket(s3, settings, multi_page_pdf_bytes, 2)
+    llm.script(PromptName.LEGAL_ADVICE, NEEDS_HUMAN)
+    llm.script(PromptName.MERGE_ADVICE, NEEDS_HUMAN)
+    llm.script(PromptName.HUMAN_FOLLOWUP, {"summary": "Revised.", "key_risks": []})
+
+    handle = await start(worker, keys)
+
+    async def both_questions_arrive():
+        while len(await handle.query(LegalReviewWorkflow.pending_questions)) < 2:
+            await asyncio.sleep(0.05)
+
+    await asyncio.wait_for(both_questions_arrive(), timeout=30)
+    assert await handle.query(LegalReviewWorkflow.finished_documents) == []
+
+    # only the first document is released; the second keeps the run going
+    await handle.signal(LegalReviewWorkflow.human_response, args=[keys[0], "English law"])
+
+    async def first_document_published():
+        while not await handle.query(LegalReviewWorkflow.finished_documents):
+            await asyncio.sleep(0.05)
+
+    await asyncio.wait_for(first_document_published(), timeout=30)
+
+    finished = await handle.query(LegalReviewWorkflow.finished_documents)
+    assert [doc.pdf_key for doc in finished] == [keys[0]]
+    assert finished[0].advice.summary == "Revised."
+    # stored before it is published, so the path is already there
+    assert finished[0].advice.s3_path.startswith(f"s3://{settings.s3_legal_advice}/")
+
+    await handle.signal(LegalReviewWorkflow.human_response, args=[keys[1], "English law"])
+    result = await handle.result()
+    assert result.document_count == 2
+
+
 # --- failures ------------------------------------------------------------
 
 
