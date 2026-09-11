@@ -23,6 +23,8 @@ worker, and a browser UI served by the API drives the legal review.
   - [PDF to Markdown](#pdf-to-markdown)
   - [Legal review](#legal-review)
 - [Layout](#layout)
+  - [Architecture](#architecture)
+  - [Directory tree](#directory-tree)
 - [Requirements](#requirements)
 - [Setup](#setup)
   - [Environment variables](#environment-variables)
@@ -168,40 +170,105 @@ implementation registered in `interfaces/llm_factory.py`.
 
 ## Layout
 
+### Architecture
+
+```mermaid
+flowchart LR
+    reviewer([Reviewer]) --> ui["Browser UI<br/>/ui"]
+    ui -->|"POST /legal<br/>GET /legal/{task_id}<br/>POST /legal/{task_id}/respond"| api["FastAPI API<br/>:8000"]
+    scripts([Scripts]) -->|"POST /process<br/>GET /process/{task_id}"| api
+    api -->|"store uploads"| s3[("S3-compatible storage<br/>PDFs, Markdown, advice JSON")]
+    api -->|"start, query, signal"| temporal[("Temporal<br/>:7233")]
+    temporal <-->|"process_pdf_queue"| pdfworker["PDF worker<br/>ProcessPdfWorkflow"]
+    temporal <-->|"legal_advice_queue"| legalworker["Legal worker<br/>LegalReviewWorkflow"]
+    pdfworker -->|"download PDF, store Markdown"| s3
+    legalworker -->|"download PDFs, store advice"| s3
+    legalworker -->|"analyze, merge, follow up"| llm["OpenRouter<br/>OPENROUTER_MODEL"]
 ```
-main.py                      FastAPI app, /health, the UI mount, uvicorn entrypoint
-worker.py                    PDF worker entrypoint (uv run worker.py)
-workers/process_pdf_worker/  the PDF -> Markdown worker, with Docker/
-workers/legal_advice_worker/ the legal review worker, with Docker/
-utils/create_worker.py       create_worker() factory
-routes/process.py            POST /process, GET /process/{task_id}
-routes/legal.py              POST /legal, GET /legal/{task_id},
-                             POST /legal/{task_id}/respond
-workflows/                   ProcessPdfWorkflow, LegalReviewWorkflow
-activities/                  one Temporal activity per file
-schemas/                     one dataclass schema file per activity/workflow
-interfaces/                  LLMInterface, the OpenRouter client, get_llm()
-prompts/                     one prompt per file: legal advice, merge, follow-up
-enums/RetryPolicy/           one retry policy per file
-enums/                       TaskStatus, RiskSeverity, ReviewDecision, ...
-utils/utility.py             get_s3_client, upload_s3_file, download_s3_file,
-                             build_run_artifacts
-utils/temporal_client.py     get_temporal_client
-utils/config.py              pydantic-settings Settings, loaded from .env
-utils/logger.py              setup_logging, get_logger
-utils/store_upload.py        validate_upload, store_upload, store_uploads
-utils/responses.py           the JSON bodies the /process endpoints return
-utils/legal_responses.py     the JSON bodies the /legal endpoints return
-utils/batching.py            split_pages_into_batches
-utils/http_errors.py         exception -> HTTP status mapping
-utils/workflow_ids.py        task id <-> workflow id
-parsers/pymupdf_parser.py    parse_pdf, parse_pdf_pages, parse_pdf_to_file
-exceptions/                  the project's exception hierarchy
-ui/                          the browser UI: index.html, styles.css, app.js
-images/                      screenshots used in this README
-tests/                       pytest suite (offline, no credentials needed)
-assets/                      local scratch space (gitignored)
-setup/                       Temporal server samples (see below)
+
+The API never does the heavy work itself. It stores each upload in S3, starts
+a workflow on the right task queue, and from then on only talks to Temporal:
+it queries a running review for its progress, pending questions and finished
+results, and turns an answer from the UI into the `human_response` signal. Each
+worker polls its own queue, so the two pipelines scale and fail independently,
+and only the legal worker talks to the model. The queue names shown are the
+defaults (`TEMPORAL_TASK_QUEUE`, `LEGAL_TASK_QUEUE`).
+
+### Directory tree
+
+```text
+legal-review-agent/
+├── main.py                         FastAPI app: routes, /health, the UI mount, uvicorn entrypoint
+├── worker.py                       PDF worker entrypoint (uv run worker.py)
+├── ui/                             browser UI served at /ui, no build step
+│   ├── index.html
+│   ├── styles.css
+│   └── app.js
+├── routes/
+│   ├── process.py                  POST /process, GET /process/{task_id}
+│   └── legal.py                    POST /legal, GET /legal/{task_id}, POST /legal/{task_id}/respond
+├── workflows/
+│   ├── workflow_process_pdf.py     ProcessPdfWorkflow
+│   └── workflow_legal_review.py    LegalReviewWorkflow: concurrency cap, human wait, queries
+├── activities/                     one Temporal activity per file
+│   ├── upload_pdf.py               PDF -> S3_PDF_BUCKET
+│   ├── download_pdf.py             S3_PDF_BUCKET -> local scratch (both pipelines)
+│   ├── parse_pdf.py                PDF -> Markdown
+│   ├── upload_md.py                Markdown -> S3_PARSED_MDS
+│   ├── download_md.py              S3_PARSED_MDS -> local scratch
+│   ├── split_pages.py              pages -> batches of LEGAL_PAGES_PER_BATCH
+│   ├── analyze_batch.py            one batch -> the model -> validated advice
+│   ├── merge_advice.py             per-batch advice -> one review
+│   ├── human_followup.py           revises advice with a human's answer
+│   └── upload_advice.py            advice JSON -> S3_LEGAL_ADVICE
+├── workers/
+│   ├── process_pdf_worker/         the PDF -> Markdown worker
+│   │   ├── process_pdf_worker.py
+│   │   ├── __main__.py             uv run python -m workers.process_pdf_worker
+│   │   └── Docker/                 Dockerfile, docker-compose.yml
+│   └── legal_advice_worker/        the legal review worker
+│       ├── legal_advice_worker.py
+│       ├── __main__.py             uv run python -m workers.legal_advice_worker
+│       └── Docker/                 Dockerfile, docker-compose.yml
+├── interfaces/
+│   ├── llm_interface.py            LLMInterface: JSON extraction, repair, validation
+│   ├── openrouter_llm.py           the OpenRouter client
+│   └── llm_factory.py              get_llm(), chosen by LLM_PROVIDER
+├── prompts/                        one prompt per file, looked up by PromptName
+│   ├── prompt.py                   the Prompt dataclass
+│   ├── legal_advice.py
+│   ├── merge_advice.py
+│   └── human_followup.py
+├── schemas/                        one dataclass file per activity and workflow input/output,
+│                                   plus LegalAdvice, KeyRisk and PageBatch
+├── enums/                          TaskStatus, RiskSeverity, ReviewDecision, PromptName, LLMProvider
+│   └── RetryPolicy/                StorageRetryPolicy, ParsingRetryPolicy, StrictRetryPolicy,
+│                                   LLMRetryPolicy, RetryProfile
+├── exceptions/                     AIAgentError and its config, llm, parsing, storage,
+│                                   validation and workflow families
+├── parsers/
+│   └── pymupdf_parser.py           parse_pdf, parse_pdf_pages, parse_pdf_to_file
+├── utils/
+│   ├── config.py                   pydantic-settings Settings, loaded from .env
+│   ├── create_worker.py            create_worker() factory
+│   ├── temporal_client.py          get_temporal_client
+│   ├── utility.py                  get_s3_client, upload_s3_file, download_s3_file, build_run_artifacts
+│   ├── store_upload.py             validate_upload, store_upload, store_uploads
+│   ├── batching.py                 split_pages_into_batches
+│   ├── responses.py                the JSON bodies the /process endpoints return
+│   ├── legal_responses.py          the JSON bodies the /legal endpoints return
+│   ├── http_errors.py              exception -> HTTP status mapping
+│   ├── workflow_ids.py             task id <-> workflow id
+│   └── logger.py                   setup_logging, get_logger
+├── tests/                          pytest suite, one file per module; offline, no credentials needed
+├── images/                         screenshots used in this README
+├── .github/workflows/lint.yml      CI: black, ruff and pytest on every push
+├── .pre-commit-config.yaml         the same checks before every commit
+├── .env.example                    every setting, with its default
+├── pyproject.toml, uv.lock         dependencies, managed with uv
+├── LICENSE                         MIT
+├── assets/                         local scratch space (gitignored)
+└── setup/                          Temporal server samples, cloned separately (gitignored)
 ```
 
 ## Requirements
